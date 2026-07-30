@@ -22,6 +22,7 @@ const OrgChart = require('./models/OrgChart');
 const workflowEngine = require('./workflowEngine');
 const { requireAuth, requireAdmin, issueToken } = require('./middleware/auth');
 const microsoftAuth = require('./services/microsoftAuth');
+const fileStore = require('./services/storage'); // S3-compatible bucket, or disk fallback
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET is not set in .env — refusing to start.');
@@ -92,22 +93,16 @@ app.use('/uploads', (req, res, next) => {
 });
 app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 
-// File upload config — images only, random filenames, 5MB cap
+// File upload config — files buffer in memory, then go to the file store
+// (S3-compatible bucket when configured, backend/uploads/ on disk otherwise).
 const ALLOWED_IMAGE_TYPES = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
   'image/gif': '.gif',
 };
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = ALLOWED_IMAGE_TYPES[file.mimetype] || '';
-    cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`);
-  },
-});
-const upload = multer({
-  storage,
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, !!ALLOWED_IMAGE_TYPES[file.mimetype]),
 });
@@ -119,18 +114,26 @@ const ALLOWED_ATTACHMENT_EXTS = new Set([
   '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.csv', '.txt', '.md',
   '.zip', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mov', '.json',
 ]);
-const attachmentStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`);
-  },
-});
 const attachmentUpload = multer({
-  storage: attachmentStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 10 },
   fileFilter: (req, file, cb) =>
     cb(null, ALLOWED_ATTACHMENT_EXTS.has(path.extname(file.originalname || '').toLowerCase())),
+});
+
+// Public avatar streaming (<img> tags can't send auth headers). Keys are
+// random hex — unguessable — and only ever images.
+app.get('/files/avatars/:key', async (req, res) => {
+  try {
+    if (!/^[a-f0-9]{32}\.(jpg|jpeg|png|webp|gif)$/.test(req.params.key)) return res.status(400).end();
+    const f = await fileStore.getFile(`avatars/${req.params.key}`);
+    if (!f) return res.status(404).end();
+    if (f.contentType) res.setHeader('Content-Type', f.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    f.body.pipe(res);
+  } catch {
+    res.status(500).end();
+  }
 });
 
 app.use((req, res, next) => {
@@ -362,7 +365,7 @@ app.post('/api/team/invite', requireAdmin, async (req, res) => {
 });
 
 // ==================== PROFILE PICTURE UPLOAD ====================
-app.post('/api/users/:id/avatar', upload.single('avatar'), async (req, res) => {
+app.post('/api/users/:id/avatar', avatarUpload.single('avatar'), async (req, res) => {
   try {
     const isSelf = req.params.id === req.user._id.toString();
     if (!isSelf && req.user.role !== 'Admin') {
@@ -370,7 +373,10 @@ app.post('/api/users/:id/avatar', upload.single('avatar'), async (req, res) => {
     }
     if (!req.file) return res.status(400).json({ message: 'No file uploaded (images only: jpg, png, webp, gif; max 5MB)' });
 
-    const avatarUrl = `${SERVER_URL}/uploads/${req.file.filename}`;
+    const ext = ALLOWED_IMAGE_TYPES[req.file.mimetype];
+    const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
+    await fileStore.putFile(`avatars/${filename}`, req.file.buffer, req.file.mimetype);
+    const avatarUrl = `${SERVER_URL}/files/avatars/${filename}`;
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { profilePictureUrl: avatarUrl },
@@ -621,8 +627,9 @@ app.delete('/api/tasks/:id', async (req, res) => {
   }
 });
 
-// Upload files to a task. Files are stored under random names in /uploads;
-// original names live only in the attachment metadata.
+// Upload files to a task. Stored under random keys in the file store; the
+// path saved on the task is our authenticated download route (below), so
+// attachments are only reachable by signed-in users.
 app.post('/api/tasks/:id/attachments', attachmentUpload.array('attachments', 10), async (req, res) => {
   try {
     const task = await Task.findOne({ id: req.params.id });
@@ -632,17 +639,38 @@ app.post('/api/tasks/:id/attachments', attachmentUpload.array('attachments', 10)
         message: 'No valid files uploaded (allowed: pdf, office docs, csv, txt, md, zip, images, mp4/mov, json; max 10MB each)',
       });
     }
-    const added = req.files.map(f => ({
-      id: crypto.randomUUID(),
-      name: f.originalname,
-      path: `${SERVER_URL}/uploads/${f.filename}`,
-      sizeBytes: f.size,
-      addedAt: new Date(),
-    }));
+    const added = [];
+    for (const f of req.files) {
+      const ext = path.extname(f.originalname || '').toLowerCase();
+      const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
+      await fileStore.putFile(`attachments/${filename}`, f.buffer, f.mimetype);
+      added.push({
+        id: crypto.randomUUID(),
+        name: f.originalname,
+        path: `/api/files/attachments/${filename}`,
+        sizeBytes: f.size,
+        addedAt: new Date(),
+      });
+    }
     task.attachments.push(...added);
     task.updatedBy = req.user.name;
     await task.save();
     res.status(201).json({ attachments: task.attachments });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Authenticated attachment download — streams from the file store.
+app.get('/api/files/attachments/:key', async (req, res) => {
+  try {
+    if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) return res.status(400).end();
+    const f = await fileStore.getFile(`attachments/${req.params.key}`);
+    if (!f) return res.status(404).json({ message: 'File not found' });
+    if (f.contentType) res.setHeader('Content-Type', f.contentType);
+    if (f.contentLength) res.setHeader('Content-Length', f.contentLength);
+    res.setHeader('Content-Disposition', 'attachment');
+    f.body.pipe(res);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1174,6 +1202,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`SSO configured: ${microsoftAuth.isConfigured() ? 'yes' : 'NO — set AZURE_TENANT_ID / AZURE_CLIENT_ID in .env'}`);
+  console.log(`File storage: ${fileStore.isConfigured() ? 'S3-compatible bucket' : 'local disk (backend/uploads) — set S3_* env vars for durable storage'}`);
 
   // Schedule due-date-approaching checks every hour
   setInterval(() => {

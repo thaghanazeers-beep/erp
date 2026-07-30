@@ -38,6 +38,10 @@ export const uploadTaskAttachments = (taskId, files) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
+// Attachments are auth-gated — fetch as a blob through the API (which carries
+// the session token), then hand the blob to the browser to save.
+export const downloadAttachmentBlob = (key) =>
+  API.get(`/files/attachments/${key}`, { responseType: 'blob' });
 
 // Team
 export const getTeam = () => API.get('/team');

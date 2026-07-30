@@ -71,13 +71,48 @@ Also verify: **Backup** is enabled on your cluster tier (M2+ has snapshots).
 - [ ] `https://erp.mayvel.ai/api/tasks` **without** login returns 401
 - [ ] Uploaded avatar displays (uploads work)
 
+## File storage — S3-compatible bucket (recommended: Cloudflare R2)
+
+Without this, uploaded files (avatars, task attachments) live on the app server's disk and
+are **wiped on redeploy**. With it, files go to a private bucket and survive everything.
+The app auto-detects: set the `S3_*` env vars → bucket mode; leave them empty → disk mode.
+
+### Cloudflare R2 setup (~10 min, free tier: 10 GB, zero egress fees)
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **R2 Object Storage** → **Create bucket**
+   - Name: `mayvel-erp-files` · Location: Automatic · **Keep it private** (do NOT enable public access)
+2. R2 overview → **Manage R2 API Tokens** → **Create API Token**
+   - Permissions: **Object Read & Write**, scoped to only the `mayvel-erp-files` bucket
+   - Copy the **Access Key ID** and **Secret Access Key** shown once at creation
+3. Your S3 endpoint is shown on the token page: `https://<accountid>.r2.cloudflarestorage.com`
+4. Add to Hostinger env vars and **redeploy**:
+
+| Variable | Value |
+|---|---|
+| `S3_ENDPOINT` | `https://<accountid>.r2.cloudflarestorage.com` |
+| `S3_REGION` | `auto` |
+| `S3_BUCKET` | `mayvel-erp-files` |
+| `S3_ACCESS_KEY_ID` | from step 2 |
+| `S3_SECRET_ACCESS_KEY` | from step 2 |
+
+(Backblaze B2, AWS S3, DigitalOcean Spaces, or MinIO work identically — fill the same
+five vars with that provider's endpoint/region/credentials.)
+
+### How files are protected
+
+- The bucket is **private** — nothing in it is directly reachable from the internet
+- Task attachments download only through `GET /api/files/attachments/:key`, which requires
+  a signed-in session — stricter than the old `/uploads` folder, which was publicly readable
+- Avatars stream through a public route (browsers can't attach auth headers to `<img>` tags),
+  but keys are unguessable random hex and only images are ever stored there
+- Files uploaded **before** enabling S3 stay on disk and keep working via `/uploads` until
+  the next redeploy wipes them; re-attach anything important after switching
+
 ## Security notes for production
 
 - **Rotate before go-live:** the old Notion token and the Atlas password were once committed
   in plaintext — regenerate both; use the new values only in Hostinger env vars.
 - `JWT_SECRET` in prod must differ from dev. Rotating it force-logs-out everyone (harmless).
-- Uploads (`backend/uploads/`) live on the app's disk — they do **not** survive every redeploy
-  on some platforms. Acceptable for avatars now; move to S3-compatible storage later.
 - The hourly workflow scheduler runs inside the web process — run **one instance** of the app
   (scaling to multiple instances will double-fire reminders; move to a worker before scaling).
 

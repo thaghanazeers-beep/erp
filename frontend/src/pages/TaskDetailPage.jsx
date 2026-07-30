@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { updateTask, getTeam, createTask, deleteTask, getTasks, getProjects, getSprints, uploadTaskAttachments } from '../api';
+import { updateTask, getTeam, createTask, deleteTask, getTasks, getProjects, getSprints, uploadTaskAttachments, downloadAttachmentBlob } from '../api';
 import { useAuth } from '../context/AuthContext';
 import './TaskDetailPage.css';
 
@@ -142,6 +142,30 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
   };
   const removeAttachment = (id) => { if (!canEdit) return; const u = attachments.filter(a => a.id !== id); setAttachments(u); autoSave({ attachments: u }); };
 
+  const openAttachment = async (att) => {
+    if (!att.path || att.path.startsWith('blob:')) return; // legacy dead entry
+    if (att.path.startsWith('/api/files/attachments/')) {
+      // Auth-gated file: fetch through the API (carries the session token),
+      // then trigger a browser download with the original filename.
+      try {
+        const key = att.path.split('/').pop();
+        const res = await downloadAttachmentBlob(key);
+        const url = URL.createObjectURL(res.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = att.name || 'file';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch {
+        setUploadError('Download failed — the file may have been removed.');
+      }
+    } else {
+      window.open(att.path, '_blank'); // legacy /uploads absolute URL
+    }
+  };
+
   const addChildTask = async () => {
     if (!canEdit) return;
     try {
@@ -258,7 +282,7 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
                   <div className="td-attachment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg></div>
                   <div className="td-attachment-info">
                     {att.path && !att.path.startsWith('blob:') ? (
-                      <a className="td-attachment-name" href={att.path} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{att.name}</a>
+                      <span className="td-attachment-name" onClick={() => openAttachment(att)} style={{ cursor: 'pointer', textDecoration: 'underline' }} title="Download">{att.name}</span>
                     ) : (
                       <span className="td-attachment-name" title="File was added before uploads were supported — re-attach it">{att.name} (unavailable)</span>
                     )}
