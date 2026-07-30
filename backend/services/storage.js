@@ -1,12 +1,14 @@
 /**
- * File storage — S3-compatible object storage with local-disk fallback.
+ * File storage — three interchangeable backends, chosen by env vars.
  *
- * When S3_* env vars are set (any S3-compatible provider: Cloudflare R2,
- * Backblaze B2, AWS S3, MinIO…), files live in a PRIVATE bucket and are
- * served through the app's own routes. When unset (e.g. local dev), files
- * fall back to backend/uploads/ on disk — same behavior as before.
+ *   1. S3-compatible bucket  — set S3_* vars (Cloudflare R2, B2, AWS S3, MinIO)
+ *   2. MongoDB GridFS        — set FILE_STORAGE=gridfs (no extra vendor/cost;
+ *                              files live in the DB you already run, so they
+ *                              survive redeploys and ride along with backups)
+ *   3. Local disk            — the default fallback: backend/uploads/
+ *                              (fine for dev; wiped on redeploy on most hosts)
  *
- * Required env vars for S3 mode:
+ * S3 mode env vars:
  *   S3_ENDPOINT          e.g. https://<accountid>.r2.cloudflarestorage.com
  *   S3_BUCKET            e.g. mayvel-erp-files
  *   S3_ACCESS_KEY_ID
@@ -15,16 +17,38 @@
  */
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 
 const uploadsDir = path.join(__dirname, '../uploads');
 
-function isConfigured() {
+function isS3Configured() {
   return !!(
     process.env.S3_ENDPOINT &&
     process.env.S3_BUCKET &&
     process.env.S3_ACCESS_KEY_ID &&
     process.env.S3_SECRET_ACCESS_KEY
   );
+}
+
+function isGridfsEnabled() {
+  return (process.env.FILE_STORAGE || '').toLowerCase() === 'gridfs';
+}
+
+/** Which backend is active — used for the startup log line. */
+function describeBackend() {
+  if (isS3Configured()) return 'S3-compatible bucket';
+  if (isGridfsEnabled()) return 'MongoDB GridFS (durable, no extra cost)';
+  return 'local disk (backend/uploads) — set FILE_STORAGE=gridfs or S3_* for durable storage';
+}
+
+// Kept for backwards compatibility with existing callers/logs.
+function isConfigured() {
+  return isS3Configured() || isGridfsEnabled();
+}
+
+function getBucket() {
+  if (mongoose.connection.readyState !== 1) throw new Error('Database not connected');
+  return new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'fs' });
 }
 
 let client = null;
@@ -46,7 +70,7 @@ function getClient() {
 
 /** Store a file buffer under `key` (e.g. "attachments/ab12….pdf"). */
 async function putFile(key, buffer, contentType) {
-  if (isConfigured()) {
+  if (isS3Configured()) {
     const { PutObjectCommand } = require('@aws-sdk/client-s3');
     await getClient().send(new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
@@ -56,6 +80,21 @@ async function putFile(key, buffer, contentType) {
     }));
     return { storage: 's3', key };
   }
+
+  if (isGridfsEnabled()) {
+    const bucket = getBucket();
+    const type = contentType || 'application/octet-stream';
+    await new Promise((resolve, reject) => {
+      // Also in metadata: the top-level contentType option isn't preserved by
+      // every driver version, and metadata always is.
+      const stream = bucket.openUploadStream(key, { contentType: type, metadata: { contentType: type } });
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+      stream.end(buffer);
+    });
+    return { storage: 'gridfs', key };
+  }
+
   // Disk fallback — flatten the key (uploads/ has no subdirectories)
   const filename = key.split('/').pop();
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -68,7 +107,7 @@ async function putFile(key, buffer, contentType) {
  * `body` is a readable stream, or null if the file doesn't exist.
  */
 async function getFile(key) {
-  if (isConfigured()) {
+  if (isS3Configured()) {
     try {
       const { GetObjectCommand } = require('@aws-sdk/client-s3');
       const obj = await getClient().send(new GetObjectCommand({
@@ -80,6 +119,22 @@ async function getFile(key) {
       return null;
     }
   }
+
+  if (isGridfsEnabled()) {
+    try {
+      const bucket = getBucket();
+      const [doc] = await bucket.find({ filename: key }).limit(1).toArray();
+      if (!doc) return null;
+      return {
+        body: bucket.openDownloadStream(doc._id),
+        contentType: doc.contentType || doc.metadata?.contentType,
+        contentLength: doc.length,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   const filePath = path.join(uploadsDir, key.split('/').pop());
   if (!fs.existsSync(filePath)) return null;
   return {
@@ -89,4 +144,4 @@ async function getFile(key) {
   };
 }
 
-module.exports = { isConfigured, putFile, getFile };
+module.exports = { isConfigured, describeBackend, putFile, getFile };

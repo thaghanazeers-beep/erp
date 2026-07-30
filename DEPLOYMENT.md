@@ -40,6 +40,7 @@ Health: GET /healthz
 | `APP_URL` | `https://erp.mayvel.ai` |
 | `NOTION_TOKEN` | (optional) for Notion sync — use the **rotated** token |
 | `NOTION_TASKS_DB` | (optional) Notion tasks data-source id |
+| `FILE_STORAGE` | `gridfs` — stores uploads in MongoDB (see File storage below) |
 | `SMTP_HOST/PORT/USER/PASS` | (optional) for invite emails |
 
 > `VITE_*` vars must be present **during the build step** — they're baked into the SPA bundle.
@@ -71,13 +72,39 @@ Also verify: **Backup** is enabled on your cluster tier (M2+ has snapshots).
 - [ ] `https://erp.mayvel.ai/api/tasks` **without** login returns 401
 - [ ] Uploaded avatar displays (uploads work)
 
-## File storage — S3-compatible bucket (recommended: Cloudflare R2)
+## File storage (avatars + task attachments)
 
-Without this, uploaded files (avatars, task attachments) live on the app server's disk and
-are **wiped on redeploy**. With it, files go to a private bucket and survive everything.
-The app auto-detects: set the `S3_*` env vars → bucket mode; leave them empty → disk mode.
+Uploaded files must not live on the app server's local disk — that disk is wiped when the
+platform rebuilds the app. Three supported backends, selected by env vars:
 
-### Cloudflare R2 setup (~10 min, free tier: 10 GB, zero egress fees)
+| Mode | Set | Cost | Notes |
+|---|---|---|---|
+| **MongoDB GridFS** | `FILE_STORAGE=gridfs` | none | Files stored in the DB you already run. **Current production setting.** |
+| S3-compatible bucket | `S3_*` vars | free tier / paid | Best at scale; R2/B2/S3/MinIO |
+| Local disk | neither | none | Dev only — lost on redeploy |
+
+### Option A — MongoDB GridFS (no card, no extra vendor)
+
+Set one env var and redeploy:
+
+```
+FILE_STORAGE=gridfs
+```
+
+Files are chunked into the `fs.files` / `fs.chunks` collections in your existing Atlas
+database. Nothing else to configure.
+
+**Watch your DB quota.** Attachments consume the same storage as your data. Atlas's free
+M0 tier is 512 MB total; the app's own data is ~2 MB, so ~500 MB is available for files.
+Check usage in the Atlas dashboard periodically. If you approach the limit, either upgrade
+the cluster or switch to a bucket (Option B) — no code change either way, just env vars.
+
+Note: automated backups are **not** included on Atlas's free M0 tier, so files stored here
+inherit that. If these documents matter, keep copies elsewhere or move to a paid tier.
+
+### Option B — Cloudflare R2 (~10 min; 10 GB free, zero egress fees)
+
+Heads-up: R2 activation may require a card on file even on the free tier.
 
 1. [dash.cloudflare.com](https://dash.cloudflare.com) → **R2 Object Storage** → **Create bucket**
    - Name: `mayvel-erp-files` · Location: Automatic · **Keep it private** (do NOT enable public access)

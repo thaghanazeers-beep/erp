@@ -1202,7 +1202,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`SSO configured: ${microsoftAuth.isConfigured() ? 'yes' : 'NO — set AZURE_TENANT_ID / AZURE_CLIENT_ID in .env'}`);
-  console.log(`File storage: ${fileStore.isConfigured() ? 'S3-compatible bucket' : 'local disk (backend/uploads) — set S3_* env vars for durable storage'}`);
+  console.log(`File storage: ${fileStore.describeBackend()}`);
 
   // Schedule due-date-approaching checks every hour
   setInterval(() => {
