@@ -41,7 +41,30 @@ const FILE_BLOCK_TYPES = new Set(['file', 'image', 'pdf', 'video', 'audio']);
 const CONCURRENCY = 3;              // Notion allows ~3 req/s
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // skip anything bigger
 
+/**
+ * Hard storage ceiling, in MB of actual database storage.
+ *
+ * This MUST be measured from db.stats(), not from bytes downloaded: GridFS adds
+ * chunk overhead and the cluster quota counts indexes and other collections
+ * too, so "bytes fetched" runs well behind real usage. A previous run trusted a
+ * downloaded-bytes counter, sailed past its limit, and exhausted a 512MB Atlas
+ * quota — which blocks ALL writes cluster-wide, taking the app down.
+ * Default leaves generous headroom under a 512MB free tier.
+ */
+const MAX_STORAGE_MB = (() => {
+  const a = process.argv.find(x => x.startsWith('--max-storage-mb='));
+  return a ? parseInt(a.split('=')[1], 10) : 300;
+})();
+
 const mb = (b) => (b / 1048576).toFixed(1) + ' MB';
+
+let aborted = false;
+
+/** Actual database storage in MB, straight from the server. */
+async function storageUsedMb() {
+  const s = await mongoose.connection.db.stats();
+  return (s.storageSize + s.indexSize) / 1048576;
+}
 
 /** Retry wrapper for Notion rate limits (429) and transient errors. */
 async function notionCall(fn, attempts = 4) {
@@ -188,9 +211,14 @@ async function main() {
   const stats = { scanned: 0, tasksWithFiles: 0, files: 0, bytes: 0, imported: 0, skipped: 0, linked: 0, failed: 0 };
   const failures = [];
 
+  if (!SCAN_ONLY) {
+    console.log(`Storage ceiling: ${MAX_STORAGE_MB} MB (currently ${(await storageUsedMb()).toFixed(1)} MB)\n`);
+  }
+
   await pool(tasks, async (task) => {
+    if (aborted) return;
     stats.scanned++;
-    if (stats.scanned % 100 === 0) {
+    if (stats.scanned % 25 === 0) {
       process.stdout.write(`\r  progress ${stats.scanned}/${tasks.length} · files ${stats.files} · ${mb(stats.bytes)}   `);
     }
 
@@ -233,6 +261,15 @@ async function main() {
         });
         stats.linked++;
         continue;
+      }
+      // Hard guard: re-measure real storage before every stored file.
+      const used = await storageUsedMb();
+      if (used >= MAX_STORAGE_MB) {
+        aborted = true;
+        console.log(`\n\n⛔ STOPPING: database storage at ${used.toFixed(1)} MB, ceiling is ${MAX_STORAGE_MB} MB.`);
+        console.log('   Nothing was corrupted — already-imported files are kept and the run is resumable.');
+        console.log('   Raise with --max-storage-mb=N, upgrade the cluster, or switch to S3_* storage.');
+        break;
       }
       try {
         const { buffer, contentType } = await download(it.url);
