@@ -29,12 +29,44 @@ export async function ensureMsalInitialized() {
   return msalInstance;
 }
 
+/**
+ * Clears MSAL's "interaction in progress" flag. It lives in sessionStorage and
+ * is meant to be cleared when a login popup resolves/rejects — but if a prior
+ * attempt was interrupted uncleanly (popup closed, redirect URI misconfigured,
+ * tab closed mid-flow), it can get stuck and block every future sign-in with
+ * `interaction_in_progress` even though nothing is actually running.
+ */
+function clearStuckInteractionState() {
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith('msal.') || key.includes('interaction.status')) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // sessionStorage unavailable (e.g. privacy mode) — nothing to clear
+  }
+}
+
 /** Runs the Microsoft sign-in popup and returns the ID token. */
 export async function signInWithMicrosoft() {
   const instance = await ensureMsalInitialized();
-  const result = await instance.loginPopup({
-    scopes: ['openid', 'profile', 'email'],
-    prompt: 'select_account',
-  });
-  return result.idToken;
+  try {
+    const result = await instance.loginPopup({
+      scopes: ['openid', 'profile', 'email'],
+      prompt: 'select_account',
+    });
+    return result.idToken;
+  } catch (err) {
+    if (err.errorCode === 'interaction_in_progress') {
+      // Stale flag from an earlier interrupted attempt — clear it and retry once.
+      clearStuckInteractionState();
+      const result = await instance.loginPopup({
+        scopes: ['openid', 'profile', 'email'],
+        prompt: 'select_account',
+      });
+      return result.idToken;
+    }
+    throw err;
+  }
 }
