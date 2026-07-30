@@ -75,7 +75,10 @@ const str = (v) => (typeof v === 'string' ? v : undefined);
 // of the app) breaks exactly that link if applied here, leaving the popup stuck
 // showing the response instead of closing. Strip it for this one static file only.
 app.use((req, res, next) => {
-  if (req.path === '/blank.html') res.removeHeader('Cross-Origin-Opener-Policy');
+  if (req.path === '/blank.html') {
+    res.removeHeader('Cross-Origin-Opener-Policy');
+    res.setHeader('Cache-Control', 'no-store'); // never cache the auth redirect landing page
+  }
   next();
 });
 
