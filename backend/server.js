@@ -82,9 +82,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve uploaded files (images only ever get stored — see upload config)
+// Serve uploaded files. Non-image files are forced to download rather than
+// render inline, so nothing user-uploaded can ever execute in our origin.
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', (req, res, next) => {
+  if (!/\.(jpe?g|png|webp|gif)$/i.test(req.path)) res.setHeader('Content-Disposition', 'attachment');
+  next();
+});
 app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 
 // File upload config — images only, random filenames, 5MB cap
@@ -105,6 +110,27 @@ const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, !!ALLOWED_IMAGE_TYPES[file.mimetype]),
+});
+
+// Task attachments — broader types than avatars, still an allowlist.
+// Deliberately excludes html/svg/js/executables: nothing uploaded may ever
+// execute when served back from our origin.
+const ALLOWED_ATTACHMENT_EXTS = new Set([
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.csv', '.txt', '.md',
+  '.zip', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mov', '.json',
+]);
+const attachmentStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    cb(null, `${crypto.randomBytes(16).toString('hex')}${ext}`);
+  },
+});
+const attachmentUpload = multer({
+  storage: attachmentStorage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+  fileFilter: (req, file, cb) =>
+    cb(null, ALLOWED_ATTACHMENT_EXTS.has(path.extname(file.originalname || '').toLowerCase())),
 });
 
 app.use((req, res, next) => {
@@ -590,6 +616,33 @@ app.delete('/api/tasks/:id', async (req, res) => {
   try {
     await Task.findOneAndDelete({ id: req.params.id });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload files to a task. Files are stored under random names in /uploads;
+// original names live only in the attachment metadata.
+app.post('/api/tasks/:id/attachments', attachmentUpload.array('attachments', 10), async (req, res) => {
+  try {
+    const task = await Task.findOne({ id: req.params.id });
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        message: 'No valid files uploaded (allowed: pdf, office docs, csv, txt, md, zip, images, mp4/mov, json; max 10MB each)',
+      });
+    }
+    const added = req.files.map(f => ({
+      id: crypto.randomUUID(),
+      name: f.originalname,
+      path: `${SERVER_URL}/uploads/${f.filename}`,
+      sizeBytes: f.size,
+      addedAt: new Date(),
+    }));
+    task.attachments.push(...added);
+    task.updatedBy = req.user.name;
+    await task.save();
+    res.status(201).json({ attachments: task.attachments });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

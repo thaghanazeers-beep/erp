@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { updateTask, getTeam, createTask, deleteTask, getTasks, getProjects, getSprints } from '../api';
+import { updateTask, getTeam, createTask, deleteTask, getTasks, getProjects, getSprints, uploadTaskAttachments } from '../api';
 import { useAuth } from '../context/AuthContext';
 import './TaskDetailPage.css';
 
@@ -32,6 +32,8 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
   const [showBlockMenu, setShowBlockMenu] = useState(null);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const titleRef = useRef(null);
   const saveTimer = useRef(null);
   const fileInputRef = useRef(null);
@@ -118,11 +120,25 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
     if (e.key === '/' && block.content === '') { e.preventDefault(); setShowBlockMenu(block.id); }
   };
 
-  const handleFileAdd = (e) => {
+  const handleFileAdd = async (e) => {
     if (!canEdit) return;
-    const files = Array.from(e.target.files);
-    const na = files.map(f => ({ id: Date.now().toString() + Math.random(), name: f.name, sizeBytes: f.size, path: URL.createObjectURL(f), addedAt: new Date().toISOString() }));
-    const u = [...attachments, ...na]; setAttachments(u); autoSave({ attachments: u });
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!files.length || !task?.id) return;
+    setUploadError('');
+    setUploading(true);
+    try {
+      // Real upload — files are stored on the server; the returned list is
+      // the task's full attachment array with permanent URLs.
+      const res = await uploadTaskAttachments(task.id, files);
+      setAttachments(res.data.attachments);
+      setLastSaved(new Date());
+      onUpdated?.();
+    } catch (err) {
+      setUploadError(err.response?.data?.message || 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
   const removeAttachment = (id) => { if (!canEdit) return; const u = attachments.filter(a => a.id !== id); setAttachments(u); autoSave({ attachments: u }); };
 
@@ -227,16 +243,27 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
           {/* Attachments */}
           <div className="td-section">
             <div className="td-section-header"><h3>Attachments</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg> Add
+              <button className="btn btn-ghost btn-sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                {uploading
+                  ? <span className="spinner" style={{ width: 14, height: 14 }} />
+                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>}
+                {uploading ? ' Uploading…' : ' Add'}
               </button>
               <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileAdd} />
             </div>
+            {uploadError && <p className="td-empty-hint" style={{ color: 'var(--danger, #e74c3c)' }}>{uploadError}</p>}
             {attachments.length > 0 ? (
               <div className="td-attachments">{attachments.map(att => (
                 <div className="td-attachment" key={att.id}>
                   <div className="td-attachment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg></div>
-                  <div className="td-attachment-info"><span className="td-attachment-name">{att.name}</span><span className="td-attachment-size">{formatSize(att.sizeBytes)}</span></div>
+                  <div className="td-attachment-info">
+                    {att.path && !att.path.startsWith('blob:') ? (
+                      <a className="td-attachment-name" href={att.path} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{att.name}</a>
+                    ) : (
+                      <span className="td-attachment-name" title="File was added before uploads were supported — re-attach it">{att.name} (unavailable)</span>
+                    )}
+                    <span className="td-attachment-size">{formatSize(att.sizeBytes)}</span>
+                  </div>
                   <button className="btn-icon" onClick={() => removeAttachment(att.id)} style={{ width: 28, height: 28 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </div>
               ))}</div>

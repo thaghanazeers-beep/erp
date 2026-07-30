@@ -31,6 +31,13 @@ export const getTasks = (tsId) => API.get('/tasks' + (tsId ? `?teamspaceId=${tsI
 export const createTask = (task) => API.post('/tasks', task);
 export const updateTask = (id, task) => API.put(`/tasks/${id}`, task);
 export const deleteTask = (id) => API.delete(`/tasks/${id}`);
+export const uploadTaskAttachments = (taskId, files) => {
+  const formData = new FormData();
+  files.forEach((f) => formData.append('attachments', f));
+  return API.post(`/tasks/${taskId}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
 
 // Team
 export const getTeam = () => API.get('/team');
