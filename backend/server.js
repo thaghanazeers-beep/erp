@@ -69,6 +69,16 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** Only accept plain strings from query params (NoSQL-injection guard). */
 const str = (v) => (typeof v === 'string' ? v : undefined);
 
+// The MSAL popup navigates itself to /blank.html after Microsoft redirects back.
+// The main window then needs a live reference into that popup's browsing context
+// to read the auth response and close it — our COOP header (needed for the rest
+// of the app) breaks exactly that link if applied here, leaving the popup stuck
+// showing the response instead of closing. Strip it for this one static file only.
+app.use((req, res, next) => {
+  if (req.path === '/blank.html') res.removeHeader('Cross-Origin-Opener-Policy');
+  next();
+});
+
 // Serve uploaded files (images only ever get stored — see upload config)
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
