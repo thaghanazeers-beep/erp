@@ -1,28 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { loginWithMicrosoft } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { msalConfigured, signInWithMicrosoft } from '../msal';
+import { msalConfigured, startMicrosoftSignIn, completeMicrosoftSignIn } from '../msal';
 import './AuthPage.css';
 
 export default function AuthPage() {
   const [loading, setLoading] = useState(false);
+  const [completing, setCompleting] = useState(true); // true while we check for a redirect return
   const [error, setError] = useState('');
   const { loginUser } = useAuth();
+
+  // If this page load is the return leg of the Microsoft redirect,
+  // finish the sign-in: exchange the Microsoft ID token for our app session.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await completeMicrosoftSignIn();
+        if (idToken && !cancelled) {
+          const res = await loginWithMicrosoft(idToken);
+          if (!cancelled) loginUser(res.data.user, res.data.token);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.response?.data?.message || err.errorMessage || err.message || 'Sign-in failed. Please try again.');
+        }
+      } finally {
+        if (!cancelled) setCompleting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [loginUser]);
 
   const handleMicrosoftSignIn = async () => {
     setError('');
     setLoading(true);
     try {
-      const idToken = await signInWithMicrosoft();
-      const res = await loginWithMicrosoft(idToken);
-      loginUser(res.data.user, res.data.token);
+      await startMicrosoftSignIn(); // navigates away — nothing runs after this on success
     } catch (err) {
-      if (err.errorCode === 'user_cancelled' || err.errorCode === 'popup_window_error') {
-        // user closed the popup — not an error worth showing
-      } else {
-        setError(err.response?.data?.message || err.message || 'Sign-in failed. Please try again.');
-      }
-    } finally {
+      setError(err.response?.data?.message || err.errorMessage || err.message || 'Sign-in failed. Please try again.');
       setLoading(false);
     }
   };
@@ -61,10 +77,10 @@ export default function AuthPage() {
         <button
           className="btn btn-primary auth-submit"
           onClick={handleMicrosoftSignIn}
-          disabled={loading || !msalConfigured}
+          disabled={loading || completing || !msalConfigured}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
         >
-          {loading ? (
+          {loading || completing ? (
             <span className="spinner" />
           ) : (
             <>
