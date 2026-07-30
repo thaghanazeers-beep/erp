@@ -18,6 +18,7 @@ const attachmentSchema = new mongoose.Schema({
   path: String,
   sizeBytes: Number,
   addedAt: Date,
+  notionBlockId: String, // set on Notion-imported files, so re-imports skip them
 });
 
 const taskSchema = new mongoose.Schema({
