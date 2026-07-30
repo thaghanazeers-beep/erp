@@ -10,7 +10,10 @@ export const msalInstance = msalConfigured
       auth: {
         clientId,
         authority: `https://login.microsoftonline.com/${tenantId}`,
-        redirectUri: window.location.origin,
+        // Dedicated blank page (not the app root) — the auth popup navigates
+        // here after sign-in and just closes itself, instead of re-mounting
+        // the whole SPA inside the popup (which trips MSAL's nested-popup guard).
+        redirectUri: `${window.location.origin}/blank.html`,
       },
       cache: { cacheLocation: 'sessionStorage' },
     })
