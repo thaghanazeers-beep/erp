@@ -1,0 +1,83 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ===== Mayvel backend/frontend (added by security audit fix) =====
+# Secrets — never commit
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+!frontend/.env.production
+
+# Node
+**/node_modules/
+
+# User uploads & local artifacts
+backend/uploads/
+frontend/dist/
+
+# ===== Excluded from the ERP repo =====
+# Separate experiment app (contains its own auth code/artifacts) — not part of this deployment
+notion-workspace/
+
+# Flutter skeleton left over from project scaffolding — not part of this deployment
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+lib/
+test/
+pubspec.yaml
+pubspec.lock
+analysis_options.yaml
+.metadata
+.flutter-plugins-dependencies
+task.iml
+.dart_tool/
+.idea/

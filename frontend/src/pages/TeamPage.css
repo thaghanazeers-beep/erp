@@ -1,0 +1,203 @@
+.team-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.team-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ======================== TEAM GRID ======================== */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.team-card {
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  transition: all var(--transition);
+}
+.team-card:hover {
+  border-color: var(--border-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.team-card-top {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.team-avatar {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent-green));
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+.team-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Card action buttons */
+.team-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.team-card:hover .team-card-actions { opacity: 1; }
+
+.team-edit {
+  color: var(--primary-light);
+}
+.team-edit:hover { background: rgba(108, 92, 231, 0.15) !important; }
+
+.team-remove {
+  color: var(--accent-red, #ff6b6b);
+}
+.team-remove:hover { background: rgba(255, 107, 107, 0.12) !important; }
+
+.team-name {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.team-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* Role badges */
+.badge-owner {
+  background: rgba(253, 203, 110, 0.15);
+  color: #fdcb6e;
+  border: 1px solid rgba(253, 203, 110, 0.3);
+}
+
+/* ======================== EDIT MEMBER MODAL ======================== */
+.modal-wide {
+  max-width: 660px !important;
+}
+
+.edit-member-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.edit-avatar-section {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-hover);
+}
+
+.edit-avatar-preview {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent-green));
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+  border: 3px solid var(--border-light);
+}
+.edit-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+
+.edit-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.edit-avatar-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+.edit-avatar-email {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+
+.edit-member-form {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.edit-form-row {
+  display: flex;
+  gap: 16px;
+}
+.edit-form-row .form-field { flex: 1; }
+
+/* Invite result styles */
+.invite-result {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+}
+.invite-success {
+  background: rgba(0, 206, 201, 0.1);
+  border: 1px solid rgba(0, 206, 201, 0.25);
+  color: var(--accent-green);
+}
+.invite-error {
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.25);
+  color: var(--accent-red);
+}
+.invite-credentials {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 206, 201, 0.15);
+}
+.invite-credentials p { color: var(--text-secondary); font-size: 0.8rem; }
+.invite-password {
+  display: block;
+  margin: 6px 0;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.85rem;
+  color: var(--text);
+  user-select: all;
+  cursor: copy;
+}
+.invite-hint {
+  font-size: 0.75rem !important;
+  color: var(--text-muted) !important;
+  margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+  .team-grid { grid-template-columns: 1fr; }
+  .edit-form-row { flex-direction: column; }
+  .edit-avatar-section { flex-direction: column; text-align: center; align-items: center; }
+}

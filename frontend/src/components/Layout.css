@@ -1,0 +1,305 @@
+.layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ======================== SIDEBAR ======================== */
+.sidebar {
+  width: 252px;
+  min-width: 252px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 8px;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 20px;
+}
+
+.sidebar-logo-icon {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-radius: var(--radius-sm);
+  color: white;
+  box-shadow: 0 2px 10px var(--primary-glow);
+}
+
+.sidebar-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--text), var(--primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+/* ── Section Header Row ── */
+.sidebar-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+.sidebar-section-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+.sidebar-section-btn {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.sidebar-section-row:hover .sidebar-section-btn { opacity: 1; }
+.sidebar-section-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+
+/* ── Sidebar Links ── */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition);
+  width: 100%;
+  text-align: left;
+}
+.sidebar-link:hover { background: var(--bg-hover); color: var(--text); }
+.sidebar-link.active {
+  background: linear-gradient(135deg, rgba(108,92,231,0.15), rgba(108,92,231,0.08));
+  color: var(--primary-light);
+  font-weight: 600;
+}
+.sidebar-link.active svg { color: var(--primary-light); }
+
+/* ── Child links (indented under teamspace) ── */
+.sidebar-link-child {
+  padding: 6px 12px 6px 18px;
+  font-size: 0.82rem;
+}
+
+/* ======================== TEAMSPACE TREE ======================== */
+.ts-tree-group {
+  margin-bottom: 2px;
+}
+
+.ts-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: var(--radius-md);
+  position: relative;
+  transition: background 0.15s;
+}
+.ts-tree-header:hover { background: var(--bg-hover); }
+.ts-tree-header.ts-active { }
+
+.ts-tree-chevron {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.ts-tree-chevron:hover { background: rgba(255,255,255,0.06); }
+
+.ts-tree-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 4px;
+  border-radius: 4px;
+  text-align: left;
+  min-width: 0;
+}
+.ts-tree-name:hover { background: rgba(255,255,255,0.04); }
+.ts-active .ts-tree-name { color: var(--primary-light); }
+
+.ts-tree-icon { font-size: 1rem; flex-shrink: 0; }
+.ts-tree-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ts-tree-menu-btn {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.ts-tree-header:hover .ts-tree-menu-btn { opacity: 1; }
+.ts-tree-menu-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+
+/* Teamspace children container */
+.ts-tree-children {
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  margin-left: 14px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+
+/* ── Context Menu ── */
+.ts-context-menu {
+  position: absolute;
+  top: 100%;
+  right: 4px;
+  z-index: 200;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  animation: fadeIn 0.12s ease;
+}
+.ts-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: left;
+  transition: background 0.1s;
+}
+.ts-context-menu button:hover { background: var(--bg-hover); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Sidebar Footer ── */
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 107, 107, 0.1) !important;
+  color: var(--accent-red) !important;
+}
+.theme-toggle:hover {
+  background: rgba(108, 92, 231, 0.1) !important;
+  color: var(--primary-light) !important;
+}
+
+/* ======================== HEADER ======================== */
+.header {
+  height: 64px;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.page-title { font-size: 1.25rem; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-user-name { font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); }
+.header-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent-green));
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  font-size: 0.85rem; font-weight: 700; color: white;
+}
+.header-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ======================== MAIN AREA ======================== */
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.content { flex: 1; overflow-y: auto; padding: 28px 32px; }
+
+/* ======================== RESPONSIVE ======================== */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed; left: -252px; top: 0; bottom: 0;
+    z-index: 100; transition: left 0.3s ease;
+  }
+  .sidebar.open { left: 0; }
+  .content { padding: 20px 16px; }
+  .header { padding: 0 16px; }
+}
+
+/* ── Teamspace Type Options ── */
+.type-option {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.8;
+}
+.type-option:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.type-option.active {
+  opacity: 1;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+

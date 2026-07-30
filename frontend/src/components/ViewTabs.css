@@ -1,0 +1,106 @@
+.view-tabs-container {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  padding-bottom: 0;
+}
+.view-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.view-tab {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  margin-bottom: -1px;
+}
+.view-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+.view-tab.active {
+  color: var(--text-main);
+  border-bottom-color: var(--primary);
+  font-weight: 500;
+}
+.view-add-wrapper {
+  position: relative;
+}
+.view-add-btn {
+  background: transparent;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+.view-add-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+.view-popover {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  width: 260px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  z-index: 100;
+  padding: 12px;
+}
+.view-popover-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.view-popover-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.view-popover-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 12px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.view-popover-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+}
+.view-popover-icon {
+  font-size: 1.4rem;
+  color: var(--text-main);
+}
+.view-popover-label {
+  font-size: 0.8rem;
+  color: var(--text-main);
+}

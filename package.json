@@ -1,0 +1,16 @@
+{
+  "name": "mayvel-erp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mayvel Workspace — task management + ERP (Express API + React SPA, single service)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "npm --prefix backend ci && npm --prefix frontend ci",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start",
+    "dev:backend": "npm --prefix backend start",
+    "dev:frontend": "npm --prefix frontend run dev"
+  }
+}
