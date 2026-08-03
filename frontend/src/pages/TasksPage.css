@@ -383,6 +383,22 @@
   color: var(--text-muted);
 }
 
+.task-card-attachments {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.list-item-attachments {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* ======================== LIST VIEW ======================== */
 .list-view {
   display: flex;

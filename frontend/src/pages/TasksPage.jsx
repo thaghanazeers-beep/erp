@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import TaskDetailPage from './TaskDetailPage';
 import ViewTabs from '../components/ViewTabs';
+import FileTypeIcon from '../components/FileTypeIcon';
 import './TasksPage.css';
 
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
@@ -478,6 +479,12 @@ export default function TasksPage() {
                             {(task.estimatedHours > 0 || task.actualHours > 0) && (
                               <span className="task-card-hours">⏱ {task.actualHours || 0}/{task.estimatedHours || 0}h</span>
                             )}
+                            {task.attachments?.length > 0 && (
+                              <span className="task-card-attachments" title={`${task.attachments.length} attachment${task.attachments.length > 1 ? 's' : ''}`}>
+                                <FileTypeIcon name={task.attachments[0].name} size={12} />
+                                {task.attachments.length > 1 && task.attachments.length}
+                              </span>
+                            )}
                             {task.assignee && (
                               <span className="task-card-assignee">
                                 <div className="task-card-avatar">{renderAvatar(task.assignee)}</div>
@@ -545,6 +552,12 @@ export default function TasksPage() {
                       <div className={`list-dot ${STATUS_DOT[task.status] || 'dot-notstarted'}`} style={{ marginLeft: 0 }} />
                       <span className="list-item-title">{task.title}</span>
                       {task.projectId && <span className="list-item-project">{getProjectName(task.projectId)}</span>}
+                      {task.attachments?.length > 0 && (
+                        <span className="list-item-attachments" title={`${task.attachments.length} attachment${task.attachments.length > 1 ? 's' : ''}`}>
+                          <FileTypeIcon name={task.attachments[0].name} size={14} />
+                          {task.attachments.length > 1 && task.attachments.length}
+                        </span>
+                      )}
                     </div>
                     <div className="list-item-right">
                       <span className="list-item-assignee" style={{ width: 120 }}>
