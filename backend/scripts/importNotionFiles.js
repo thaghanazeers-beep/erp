@@ -35,6 +35,14 @@ const LIMIT = (() => {
   const a = process.argv.find(x => x.startsWith('--limit='));
   return a ? parseInt(a.split('=')[1], 10) : 0;
 })();
+/** Only consider tasks created on/after this date (YYYY-MM-DD). */
+const SINCE = (() => {
+  const a = process.argv.find(x => x.startsWith('--since='));
+  if (!a) return null;
+  const d = new Date(a.split('=')[1]);
+  if (isNaN(d)) { console.error('Invalid --since date; use YYYY-MM-DD'); process.exit(1); }
+  return d;
+})();
 
 const notion = new Client({ auth: NOTION_TOKEN });
 const FILE_BLOCK_TYPES = new Set(['file', 'image', 'pdf', 'video', 'audio']);
@@ -203,10 +211,15 @@ async function main() {
   await mongoose.connect(MONGO_URI);
   if (!SCAN_ONLY) console.log(`Storage backend: ${fileStore.describeBackend()}\n`);
 
-  const query = Task.find({ notionId: { $exists: true, $ne: null } }, 'id title notionId attachments');
+  const filter = { notionId: { $exists: true, $ne: null } };
+  if (SINCE) filter.createdDate = { $gte: SINCE };
+  const query = Task.find(filter, 'id title notionId attachments createdDate').sort({ createdDate: -1 });
   if (LIMIT) query.limit(LIMIT);
   const tasks = await query;
-  console.log(`Walking ${tasks.length} Notion-linked tasks…\n`);
+  console.log(`Walking ${tasks.length} Notion-linked tasks${SINCE ? ` created since ${SINCE.toISOString().slice(0, 10)}` : ''}…\n`);
+
+  // scan mode: size per month, so a cutoff can be chosen that fits the quota
+  const byMonth = {};
 
   const stats = { scanned: 0, tasksWithFiles: 0, files: 0, bytes: 0, imported: 0, skipped: 0, linked: 0, failed: 0 };
   const failures = [];
@@ -243,11 +256,15 @@ async function main() {
     stats.files += fresh.length;
 
     if (SCAN_ONLY) {
+      let taskBytes = 0;
       for (const it of fresh) {
-        stats.bytes += it.hosted ? await probeSize(it.url) : 0;
+        taskBytes += it.hosted ? await probeSize(it.url) : 0;
       }
-      console.log(`\n  ${task.title.slice(0, 44)}`);
-      fresh.forEach(it => console.log(`      ${it.hosted ? '⬇' : '🔗'} ${it.name}  (${it.blockType})`));
+      stats.bytes += taskBytes;
+      const month = task.createdDate ? task.createdDate.toISOString().slice(0, 7) : 'unknown';
+      byMonth[month] = byMonth[month] || { files: 0, bytes: 0 };
+      byMonth[month].files += fresh.length;
+      byMonth[month].bytes += taskBytes;
       return;
     }
 
@@ -300,7 +317,16 @@ async function main() {
   console.log(`file items found:    ${stats.files}`);
   if (SCAN_ONLY) {
     console.log(`downloadable size:   ${mb(stats.bytes)}  ← must fit your DB/bucket quota`);
-    console.log('\nRun without --scan to import.');
+    const months = Object.keys(byMonth).sort().reverse();
+    if (months.length) {
+      console.log('\nby month (newest first) — cumulative shows what each cutoff would cost:');
+      let cf = 0, cb = 0;
+      for (const m of months) {
+        cf += byMonth[m].files; cb += byMonth[m].bytes;
+        console.log(`   ${m}  ${String(byMonth[m].files).padStart(4)} files ${mb(byMonth[m].bytes).padStart(10)}   cumulative: ${String(cf).padStart(4)} files ${mb(cb).padStart(10)}`);
+      }
+    }
+    console.log('\nRun without --scan to import (add --since=YYYY-MM-DD to limit the window).');
   } else {
     console.log(`downloaded+stored:   ${stats.imported}  (${mb(stats.bytes)})`);
     console.log(`kept as links:       ${stats.linked}`);
