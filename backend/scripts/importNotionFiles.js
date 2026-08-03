@@ -6,7 +6,13 @@
  * Dropbox, …) are kept as links since we don't own that hosting.
  *
  * Walks each imported task's Notion page recursively, collecting file / image /
- * pdf / video / audio blocks plus any `files`-type properties.
+ * pdf / audio blocks plus any `files`-type properties. Video is intentionally
+ * excluded — it dwarfs the storage budget for little task-management value —
+ * so video blocks are skipped as if they weren't there.
+ *
+ * Images are recompressed before storage (resized to fit 1920px, re-encoded
+ * as JPEG/WebP) since that's where most of the recoverable size lives; other
+ * file types are stored as downloaded.
  *
  *   node scripts/importNotionFiles.js --scan     discovery only, writes nothing
  *   node scripts/importNotionFiles.js            download + store + attach
@@ -19,6 +25,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env'), qui
 const crypto = require('crypto');
 const path = require('path');
 const mongoose = require('mongoose');
+const sharp = require('sharp');
 const { Client } = require('@notionhq/client');
 const { Task } = require('../models/Task');
 const fileStore = require('../services/storage');
@@ -45,9 +52,12 @@ const SINCE = (() => {
 })();
 
 const notion = new Client({ auth: NOTION_TOKEN });
-const FILE_BLOCK_TYPES = new Set(['file', 'image', 'pdf', 'video', 'audio']);
+const FILE_BLOCK_TYPES = new Set(['file', 'image', 'pdf', 'audio']); // no 'video' — too large, not needed
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'heic']);
 const CONCURRENCY = 3;              // Notion allows ~3 req/s
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // skip anything bigger
+const IMAGE_MAX_DIMENSION = 1920;   // longest edge, px
+const IMAGE_QUALITY = 80;
 
 /**
  * Hard storage ceiling, in MB of actual database storage.
@@ -96,7 +106,7 @@ function fileName(block, data, idx) {
     const base = decodeURIComponent(new URL(url).pathname.split('/').pop() || '');
     if (base) return base;
   } catch {}
-  const extByType = { image: '.png', pdf: '.pdf', video: '.mp4', audio: '.mp3', file: '' };
+  const extByType = { image: '.png', pdf: '.pdf', audio: '.mp3', file: '' };
   return `${block.type}-${idx}${extByType[block.type] || ''}`;
 }
 
@@ -176,6 +186,29 @@ async function download(url) {
 }
 
 /**
+ * Recompress an image to fit within IMAGE_MAX_DIMENSION at IMAGE_QUALITY.
+ * Transparent images go to WebP (keeps alpha, still compresses well);
+ * everything else goes to JPEG. Returns null if it's not a decodable image
+ * or shrinking doesn't actually help — callers keep the original in that case.
+ */
+async function compressImage(buffer) {
+  try {
+    const img = sharp(buffer, { failOn: 'none' });
+    const meta = await img.metadata();
+    const resized = img.resize({
+      width: IMAGE_MAX_DIMENSION, height: IMAGE_MAX_DIMENSION,
+      fit: 'inside', withoutEnlargement: true,
+    });
+    const out = meta.hasAlpha
+      ? { buffer: await resized.webp({ quality: IMAGE_QUALITY }).toBuffer(), contentType: 'image/webp', ext: '.webp' }
+      : { buffer: await resized.jpeg({ quality: IMAGE_QUALITY, mozjpeg: true }).toBuffer(), contentType: 'image/jpeg', ext: '.jpg' };
+    return out.buffer.length < buffer.length ? out : null;
+  } catch {
+    return null; // not a decodable image (e.g. .heic without libvips support) — keep original
+  }
+}
+
+/**
  * Learn a file's size without downloading it (scan mode). Notion's signed CDN
  * URLs don't answer HEAD, so ask for a single byte and read the total out of
  * the Content-Range header ("bytes 0-0/12345").
@@ -221,7 +254,7 @@ async function main() {
   // scan mode: size per month, so a cutoff can be chosen that fits the quota
   const byMonth = {};
 
-  const stats = { scanned: 0, tasksWithFiles: 0, files: 0, bytes: 0, imported: 0, skipped: 0, linked: 0, failed: 0 };
+  const stats = { scanned: 0, tasksWithFiles: 0, files: 0, bytes: 0, imported: 0, skipped: 0, linked: 0, failed: 0, compressedBytesSaved: 0 };
   const failures = [];
 
   if (!SCAN_ONLY) {
@@ -289,8 +322,17 @@ async function main() {
         break;
       }
       try {
-        const { buffer, contentType } = await download(it.url);
-        const ext = path.extname(it.name).toLowerCase() || '';
+        let { buffer, contentType } = await download(it.url);
+        let ext = path.extname(it.name).toLowerCase() || '';
+
+        if (IMAGE_EXTS.has(ext.replace('.', ''))) {
+          const compressed = await compressImage(buffer);
+          if (compressed) {
+            stats.compressedBytesSaved += buffer.length - compressed.buffer.length;
+            buffer = compressed.buffer; contentType = compressed.contentType; ext = compressed.ext;
+          }
+        }
+
         const key = `${crypto.randomBytes(16).toString('hex')}${ext}`;
         await fileStore.putFile(`attachments/${key}`, buffer, contentType);
         added.push({
@@ -329,6 +371,7 @@ async function main() {
     console.log('\nRun without --scan to import (add --since=YYYY-MM-DD to limit the window).');
   } else {
     console.log(`downloaded+stored:   ${stats.imported}  (${mb(stats.bytes)})`);
+    console.log(`saved by compression: ${mb(stats.compressedBytesSaved)}`);
     console.log(`kept as links:       ${stats.linked}`);
     console.log(`already imported:    ${stats.skipped}`);
     console.log(`failed:              ${stats.failed}`);
