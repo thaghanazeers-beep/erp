@@ -75,11 +75,12 @@ Also verify: **Backup** is enabled on your cluster tier (M2+ has snapshots).
 ## File storage (avatars + task attachments)
 
 Uploaded files must not live on the app server's local disk — that disk is wiped when the
-platform rebuilds the app. Three supported backends, selected by env vars:
+platform rebuilds the app. Four supported backends, selected by env vars:
 
 | Mode | Set | Cost | Notes |
 |---|---|---|---|
-| **MongoDB GridFS** | `FILE_STORAGE=gridfs` | none | Files stored in the DB you already run. **Current production setting.** |
+| **MongoDB GridFS** | `FILE_STORAGE=gridfs` | none | Files stored in the DB you already run. **Current production setting.** Shares the DB's 512 MB quota with app data. |
+| Hostinger FTP/FTPS | `FILE_STORAGE=ftp` + `FTP_*` vars | none (uses hosting quota) | Uses your Hostinger hosting storage instead of the DB's; private folder outside `public_html`, same auth-gated downloads |
 | S3-compatible bucket | `S3_*` vars | free tier / paid | Best at scale; R2/B2/S3/MinIO |
 | Local disk | neither | none | Dev only — lost on redeploy |
 
@@ -97,12 +98,54 @@ database. Nothing else to configure.
 **Watch your DB quota.** Attachments consume the same storage as your data. Atlas's free
 M0 tier is 512 MB total; the app's own data is ~2 MB, so ~500 MB is available for files.
 Check usage in the Atlas dashboard periodically. If you approach the limit, either upgrade
-the cluster or switch to a bucket (Option B) — no code change either way, just env vars.
+the cluster or switch to FTP (Option B) or a bucket (Option C) — no code change either way, just env vars.
 
 Note: automated backups are **not** included on Atlas's free M0 tier, so files stored here
 inherit that. If these documents matter, keep copies elsewhere or move to a paid tier.
 
-### Option B — Cloudflare R2 (~10 min; 10 GB free, zero egress fees)
+### Option B — Hostinger FTP/FTPS (uses hosting storage, not the DB's)
+
+Moves attachments off the shared 512 MB Atlas quota and onto whatever storage your
+Hostinger hosting plan includes, without adding a new vendor.
+
+1. hPanel → **Files** → **FTP Accounts** → **Create a new FTP account**. Note the **FTP
+   hostname** (either the domain-style one, e.g. `ftp.yourdomain.com`, or the raw IP shown
+   — not the browser-based File Manager link, which won't accept FTP/FTPS connections),
+   username, and password.
+2. Add to Hostinger env vars and **redeploy**:
+
+| Variable | Value |
+|---|---|
+| `FILE_STORAGE` | `ftp` |
+| `FTP_HOST` | from step 1 |
+| `FTP_USER` | from step 1 |
+| `FTP_PASSWORD` | from step 1 |
+| `FTP_PORT` | `21` (default) |
+| `FTP_SECURE` | `true` (default — explicit FTPS) |
+| `FTP_BASE_DIR` | `/mayvel-attachments` (default) |
+
+Files download through the same authenticated `GET /api/files/attachments/:key` route as
+GridFS/S3 — nothing else in the app changes.
+
+**On Hostinger, additional FTP accounts are jailed to whatever directory you set at
+creation** — commonly `public_html` itself, which is also the live site's web root. A file
+placed there would otherwise be directly downloadable by anyone with the URL, bypassing
+the app's auth entirely, since Apache serves an existing static file before Passenger ever
+sees the request. `storage.js` handles this automatically: every directory it writes to
+gets a `Require all denied` `.htaccess` dropped alongside the files, blocking direct HTTP
+access while leaving FTP reads/writes (and the app's own authenticated download route,
+which fetches over FTP, not HTTP) unaffected. Verified end-to-end against production:
+`curl` to the attachments path returns `403`, while a round-trip upload/download through
+the app's storage layer succeeds.
+
+**Certificate note:** Hostinger's shared FTPS server presents one `*.hstgr.io` wildcard
+certificate for every customer, regardless of which hostname you connect with — there's no
+per-account cert. `storage.js` trusts the certificate chain (confirmed genuine via
+`openssl s_client`) but doesn't match it against `FTP_HOST` by name, same as what FileZilla
+accepts by default. This is a Hostinger infrastructure limitation, not something specific
+to this app.
+
+### Option C — Cloudflare R2 (~10 min; 10 GB free, zero egress fees)
 
 Heads-up: R2 activation may require a card on file even on the free tier.
 
