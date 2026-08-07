@@ -40,9 +40,11 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
-      imgSrc: ["'self'", 'data:', 'https:'], // avatars (pravatar / uploaded)
+      imgSrc: ["'self'", 'data:', 'blob:', 'https:'], // avatars + blob: for attachment previews
+      mediaSrc: ["'self'", 'blob:'],                  // video/audio attachment previews
       connectSrc: ["'self'", 'https://login.microsoftonline.com'], // MSAL token endpoint
-      frameSrc: ['https://login.microsoftonline.com'],             // MSAL silent renew iframe
+      // MSAL silent renew + blob: PDF previews + Office attachment viewer
+      frameSrc: ['https://login.microsoftonline.com', 'blob:', 'https://view.officeapps.live.com'],
     },
   },
   // MSAL sign-in popup must be able to talk back to the opener window

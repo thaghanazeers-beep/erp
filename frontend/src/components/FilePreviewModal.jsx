@@ -34,7 +34,7 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
   const key = attachment.path?.split('/').pop();
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(null);   // message string when failed
   const [src, setSrc] = useState(null);       // object URL or viewer URL
   const [textBody, setTextBody] = useState(null);
 
@@ -42,7 +42,7 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
     let objectUrl = null;
     let cancelled = false;
     setLoading(true);
-    setError(false);
+    setError(null);
     setSrc(null);
     setTextBody(null);
 
@@ -70,9 +70,14 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
           }
         }
         setLoading(false);
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setError(true);
+          const status = err.response?.status;
+          setError(
+            status === 404
+              ? 'This file no longer exists in storage — it may have been uploaded before durable file storage was enabled.'
+              : `Preview failed to load${status ? ` (HTTP ${status})` : ''}.`
+          );
           setLoading(false);
         }
       }
@@ -118,17 +123,21 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
           {!loading && error && (
             <div className="fp-center fp-fallback">
               <FileTypeIcon name={attachment.name} size={40} />
-              <p>Preview failed to load.</p>
+              <p style={{ maxWidth: 380 }}>{error}</p>
               <button className="btn btn-primary btn-sm" onClick={onDownload}>Download file</button>
             </div>
           )}
 
-          {!loading && !error && kind === 'image' && <img className="fp-image" src={src} alt={attachment.name} />}
-          {!loading && !error && kind === 'video' && <video className="fp-video" src={src} controls autoPlay />}
+          {!loading && !error && kind === 'image' && (
+            <img className="fp-image" src={src} alt={attachment.name} onError={() => setError('The image could not be displayed.')} />
+          )}
+          {!loading && !error && kind === 'video' && (
+            <video className="fp-video" src={src} controls autoPlay onError={() => setError('The video could not be played in the browser.')} />
+          )}
           {!loading && !error && kind === 'audio' && (
             <div className="fp-center fp-audio-wrap">
               <FileTypeIcon name={attachment.name} size={40} />
-              <audio src={src} controls autoPlay style={{ width: 'min(480px, 90%)' }} />
+              <audio src={src} controls autoPlay style={{ width: 'min(480px, 90%)' }} onError={() => setError('The audio could not be played in the browser.')} />
             </div>
           )}
           {!loading && !error && (kind === 'pdf' || kind === 'office') && (

@@ -15,13 +15,33 @@ import TeamSettingsPage from './pages/TeamSettingsPage';
 import TeamspaceControlPage from './pages/TeamspaceControlPage';
 import Layout from './components/Layout';
 
+const PAGES = ['dashboard', 'tasks', 'projects', 'sprints', 'workflows', 'team', 'organization', 'team-settings', 'teamspace-control', 'profile'];
+const pageFromHash = () => {
+  const p = window.location.hash.replace(/^#\/?/, '');
+  return PAGES.includes(p) ? p : 'dashboard';
+};
+
 function AppContent() {
   const { user } = useAuth();
-  const [activePage, setActivePage] = useState('dashboard');
+  // The URL hash is the source of truth for the active page, so a reload
+  // (or browser back/forward) lands on the same page instead of the dashboard.
+  const [activePage, setActivePage] = useState(pageFromHash);
   const { toasts, addToast, removeToast } = useToast();
 
+  const navigate = (page) => {
+    if (!PAGES.includes(page)) return;
+    setActivePage(page);
+    if (window.location.hash !== `#/${page}`) window.location.hash = `/${page}`;
+  };
+
   useEffect(() => {
-    const handleNav = () => setActivePage('tasks');
+    const onHash = () => setActivePage(pageFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  useEffect(() => {
+    const handleNav = () => navigate('tasks');
     window.addEventListener('NAVIGATE_TO_TASK', handleNav);
     return () => window.removeEventListener('NAVIGATE_TO_TASK', handleNav);
   }, []);
@@ -30,7 +50,7 @@ function AppContent() {
 
   return (
     <>
-      <Layout activePage={activePage} onNavigate={setActivePage} onToast={addToast}>
+      <Layout activePage={activePage} onNavigate={navigate} onToast={addToast}>
         {activePage === 'dashboard' && <DashboardPage />}
         {activePage === 'tasks'     && <TasksPage />}
         {activePage === 'projects'  && <ProjectsPage />}
