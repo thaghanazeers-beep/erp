@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Volumes/Antigravity/antigravity/mayvel-task-management show --stat HEAD~2 HEAD~3)"
+    ]
+  }
+}

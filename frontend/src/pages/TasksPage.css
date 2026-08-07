@@ -72,16 +72,82 @@
   top: calc(100% + 8px);
   left: 0;
   z-index: 300;
-  width: 260px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
+  width: 300px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: 8px 0 12px;
+  padding: 4px 0 10px;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
+
+/* Rule builder */
+.filter-panel-rules { width: 500px; max-width: calc(100vw - 48px); }
+.fr-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 16px;
+}
+.fr-conj {
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.fr-conj-select { width: 100%; }
+.fr-select {
+  padding: 5px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+  min-width: 0;
+}
+.fr-select:focus { border-color: var(--primary); }
+.fr-field { width: 110px; flex-shrink: 0; }
+.fr-op { width: 120px; flex-shrink: 0; }
+.fr-value { flex: 1; }
+.fr-remove { width: 26px !important; height: 26px !important; flex-shrink: 0; }
+.fr-add {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 16px 0;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  width: fit-content;
+}
+.fr-add:hover { background: var(--bg-hover); color: var(--text); }
+
+.filter-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.filter-panel-hint {
+  margin: 8px 16px 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.filter-panel-error { color: var(--accent-red); }
 
 .filter-panel-header {
   display: flex;

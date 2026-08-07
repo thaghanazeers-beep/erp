@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { getTasks, createTask, updateTask, deleteTask, getTeam, getProjects, getSprints } from '../api';
+import { getTasks, createTask, updateTask, deleteTask, getTeam, getProjects, getSprints, getTeamspaces, updateTeamspace } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import TaskDetailPage from './TaskDetailPage';
 import ViewTabs from '../components/ViewTabs';
 import FileTypeIcon from '../components/FileTypeIcon';
+import TaskTable from '../components/TaskTable';
 import './TasksPage.css';
 
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
@@ -30,10 +31,14 @@ export default function TasksPage() {
   const { activeTeamspaceId } = useTeamspace();
   const [tasks, setTasks] = useState([]);
   const [views, setViews] = useState(() => {
+    // v2: Table is the default first view (one-time migration for saved tabs)
     const saved = localStorage.getItem('tasks_views');
-    return saved ? JSON.parse(saved) : [
-      { id: 'v1', type: 'board', name: 'Board' },
-      { id: 'v2', type: 'table', name: 'Table' }
+    const migrated = localStorage.getItem('tasks_views_v2');
+    if (saved && migrated) return JSON.parse(saved);
+    localStorage.setItem('tasks_views_v2', '1');
+    return [
+      { id: 'v1', type: 'table', name: 'Table' },
+      { id: 'v2', type: 'board', name: 'Board' }
     ];
   });
   const [activeViewId, setActiveViewId] = useState(views[0]?.id || 'v1');
@@ -52,27 +57,46 @@ export default function TasksPage() {
   const PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'];
   const PRIORITY_COLOR = { Urgent: '#d44c47', High: '#d9730d', Medium: '#2383e2', Low: '#2e9e6b' };
 
-  // Filters
-  const [openFilter, setOpenFilter] = useState(null); // which filter dropdown is open
-  const [filterAssignee, setFilterAssignee] = useState(() => localStorage.getItem('mf_assignee') || '');
-  const [filterProject, setFilterProject] = useState(() => localStorage.getItem('mf_project') || '');
-  const [filterSprint, setFilterSprint] = useState(() => localStorage.getItem('mf_sprint') || '');
-  const [filterStatus, setFilterStatus] = useState(() => localStorage.getItem('mf_status') || '');
-  const [filterPriority, setFilterPriority] = useState(() => localStorage.getItem('mf_priority') || '');
-  const [filterDateFrom, setFilterDateFrom] = useState(() => localStorage.getItem('mf_dateFrom') || '');
-  const [filterDateTo, setFilterDateTo] = useState(() => localStorage.getItem('mf_dateTo') || '');
+  // Filterable fields and their operators (Notion-style)
+  const FILTER_FIELDS = {
+    title:    { label: 'Task name', type: 'text' },
+    assignee: { label: 'Assignee',  type: 'select' },
+    project:  { label: 'Project',   type: 'select' },
+    sprint:   { label: 'Sprint',    type: 'select' },
+    status:   { label: 'Status',    type: 'select' },
+    priority: { label: 'Priority',  type: 'select' },
+    dueDate:  { label: 'Due date',  type: 'date' },
+  };
+  const FILTER_OPS = {
+    text: [
+      ['contains', 'contains'], ['not_contains', "doesn't contain"],
+      ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
+    ],
+    select: [
+      ['is', 'is'], ['is_not', 'is not'],
+      ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
+    ],
+    date: [
+      ['is', 'is'], ['before', 'is before'], ['after', 'is after'],
+      ['on_or_before', 'is on or before'], ['on_or_after', 'is on or after'],
+      ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
+    ],
+  };
+  const NO_VALUE_OPS = ['is_empty', 'is_not_empty'];
+
+  // ── Notion-style rule filters ─────────────────────────────
+  // Each rule = { id, field, op, value }; rules combine with AND or OR.
+  const [openFilter, setOpenFilter] = useState(null); // filter panel open?
+  const [filterRules, setFilterRules] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mf_rules')) || []; } catch { return []; }
+  });
+  const [filterConj, setFilterConj] = useState(() => localStorage.getItem('mf_conj') || 'and');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Persist filters
   useEffect(() => {
-    localStorage.setItem('mf_assignee', filterAssignee);
-    localStorage.setItem('mf_project', filterProject);
-    localStorage.setItem('mf_sprint', filterSprint);
-    localStorage.setItem('mf_status', filterStatus);
-    localStorage.setItem('mf_priority', filterPriority);
-    localStorage.setItem('mf_dateFrom', filterDateFrom);
-    localStorage.setItem('mf_dateTo', filterDateTo);
-  }, [filterAssignee, filterProject, filterSprint, filterStatus, filterPriority, filterDateFrom, filterDateTo]);
+    localStorage.setItem('mf_rules', JSON.stringify(filterRules));
+    localStorage.setItem('mf_conj', filterConj);
+  }, [filterRules, filterConj]);
 
   const dragItem = useRef(null);
 
@@ -124,7 +148,8 @@ export default function TasksPage() {
         customProperties: [],
         attachments: [],
         parentId: null,
-        projectId: filterProject || null,
+        // Pre-fill the project when a single "Project is …" filter is active
+        projectId: filterRules.find(r => r.field === 'project' && r.op === 'is' && r.value)?.value || null,
         estimatedHours: 0,
         actualHours: 0,
       };
@@ -153,6 +178,25 @@ export default function TasksPage() {
     if (task && !canChangeStatusTo(task, newStatus)) return;
     try { await updateTask(taskId, { status: newStatus }); fetchTasks(); }
     catch (err) { console.error(err); }
+  };
+
+  // Inline table edits (assignee / priority)
+  const handleInlineUpdate = async (taskId, patch) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !canEditTask(task)) return;
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t));
+    try { await updateTask(taskId, patch); fetchTasks(); }
+    catch (err) { console.error(err); fetchTasks(); }
+  };
+
+  // Per-column filter hookup for the table's header menus: upserts an
+  // "is <value>" rule for that field (empty value clears the field's rules)
+  const applyColumnFilter = (field, value) => {
+    setFilterRules(rules => {
+      const rest = rules.filter(r => r.field !== field);
+      if (!value) return rest;
+      return [...rest, { id: `r${Date.now()}`, field, op: 'is', value }];
+    });
   };
 
   const handleDelete = async (id) => {
@@ -199,29 +243,79 @@ export default function TasksPage() {
     dragItem.current = null;
   };
 
-  // Filter logic
+  // ── Filter rule evaluation ──────────────────────────────
+  const ruleRaw = (t, field) => ({
+    title: t.title, assignee: t.assignee, project: t.projectId, sprint: t.sprintId,
+    status: t.status, priority: t.priority, dueDate: t.dueDate,
+  })[field];
+
+  const sameDay = (a, b) => {
+    const d = new Date(a);
+    const e = new Date(b + 'T00:00:00');
+    return d.getFullYear() === e.getFullYear() && d.getMonth() === e.getMonth() && d.getDate() === e.getDate();
+  };
+
+  const matchRule = (t, r) => {
+    const raw = ruleRaw(t, r.field);
+    const type = FILTER_FIELDS[r.field]?.type;
+    switch (r.op) {
+      case 'is_empty': return !raw;
+      case 'is_not_empty': return !!raw;
+      case 'contains': return String(raw || '').toLowerCase().includes(String(r.value || '').toLowerCase());
+      case 'not_contains': return !String(raw || '').toLowerCase().includes(String(r.value || '').toLowerCase());
+      case 'is': return type === 'date' ? (!!raw && sameDay(raw, r.value)) : raw === r.value;
+      case 'is_not': return type === 'date' ? (!raw || !sameDay(raw, r.value)) : raw !== r.value;
+      case 'before': return !!raw && new Date(raw) < new Date(r.value + 'T00:00:00');
+      case 'after': return !!raw && new Date(raw) > new Date(r.value + 'T23:59:59');
+      case 'on_or_before': return !!raw && new Date(raw) <= new Date(r.value + 'T23:59:59');
+      case 'on_or_after': return !!raw && new Date(raw) >= new Date(r.value + 'T00:00:00');
+      default: return true;
+    }
+  };
+
+  // Rules missing a needed value are inactive until filled in
+  const activeRules = filterRules.filter(r => NO_VALUE_OPS.includes(r.op) || (r.value !== '' && r.value != null));
+
   const filteredTasks = tasks.filter(t => {
     if (t.parentId) return false;
-    if (filterAssignee && t.assignee !== filterAssignee) return false;
-    if (filterProject && t.projectId !== filterProject) return false;
-    if (filterSprint && t.sprintId !== filterSprint) return false;
-    if (filterStatus && t.status !== filterStatus) return false;
-    if (filterPriority && t.priority !== filterPriority) return false;
-    if (filterDateFrom && t.dueDate && new Date(t.dueDate) < new Date(filterDateFrom)) return false;
-    if (filterDateTo && t.dueDate && new Date(t.dueDate) > new Date(filterDateTo)) return false;
     if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
+    if (activeRules.length === 0) return true;
+    return filterConj === 'and' ? activeRules.every(r => matchRule(t, r)) : activeRules.some(r => matchRule(t, r));
   });
 
-  const activeFilters = [
-    filterAssignee  && { key: 'assignee',  label: 'Assignee',  value: filterAssignee,  clear: () => setFilterAssignee('') },
-    filterProject   && { key: 'project',   label: 'Project',   value: projects.find(p => p._id === filterProject)?.name || filterProject, clear: () => setFilterProject('') },
-    filterSprint    && { key: 'sprint',    label: 'Sprint',    value: sprints.find(s => s._id === filterSprint)?.name || filterSprint, clear: () => setFilterSprint('') },
-    filterStatus    && { key: 'status',    label: 'Status',    value: filterStatus,    clear: () => setFilterStatus('') },
-    filterPriority  && { key: 'priority',  label: 'Priority',  value: filterPriority,  clear: () => setFilterPriority('') },
-    filterDateFrom  && { key: 'dateFrom',  label: 'From',      value: filterDateFrom,  clear: () => setFilterDateFrom('') },
-    filterDateTo    && { key: 'dateTo',    label: 'To',        value: filterDateTo,    clear: () => setFilterDateTo('') },
-  ].filter(Boolean);
+  const ruleValueLabel = (r) => {
+    if (NO_VALUE_OPS.includes(r.op)) return '';
+    if (r.field === 'project') return projects.find(p => p._id === r.value)?.name || r.value;
+    if (r.field === 'sprint') return sprints.find(s => s._id === r.value)?.name || r.value;
+    return r.value;
+  };
+  const opLabel = (r) => (FILTER_OPS[FILTER_FIELDS[r.field]?.type] || []).find(([op]) => op === r.op)?.[1] || r.op;
+
+  // Chips under the toolbar — one per active rule
+  const activeFilters = activeRules.map(r => ({
+    key: r.id,
+    label: FILTER_FIELDS[r.field]?.label || r.field,
+    value: `${opLabel(r)}${ruleValueLabel(r) ? ` ${ruleValueLabel(r)}` : ''}`,
+    clear: () => setFilterRules(rules => rules.filter(x => x.id !== r.id)),
+  }));
+
+  // Rule list editing
+  const addRule = (field = 'assignee') => {
+    const type = FILTER_FIELDS[field].type;
+    setFilterRules(rules => [...rules, { id: `r${Date.now()}_${rules.length}`, field, op: FILTER_OPS[type][0][0], value: '' }]);
+  };
+  const updateRule = (id, patch) => {
+    setFilterRules(rules => rules.map(r => {
+      if (r.id !== id) return r;
+      const next = { ...r, ...patch };
+      if (patch.field && patch.field !== r.field) {
+        next.op = FILTER_OPS[FILTER_FIELDS[patch.field].type][0][0];
+        next.value = '';
+      }
+      return next;
+    }));
+  };
+  const removeRule = (id) => setFilterRules(rules => rules.filter(r => r.id !== id));
 
   const getTasksByStatus = (status) => filteredTasks.filter(t => t.status === status);
 
@@ -243,21 +337,44 @@ export default function TasksPage() {
     return name.charAt(0).toUpperCase();
   };
 
-  const handleSaveForEveryone = () => {
-    // In a full implementation, this would save the view to the Teamspace/Project document in DB.
-    alert("Filters saved as default for all workspace members! (UI Mockup)");
+  // ── Team default filters ("Save for everyone") ──────────
+  // Admins / Team Owners store the current filters on the teamspace; members
+  // who have no filters of their own get them applied automatically.
+  const canSaveForEveryone = isAdminOrOwner && activeTeamspaceId && activeTeamspaceId !== '__personal__';
+  const [saveDefaultState, setSaveDefaultState] = useState(''); // '', 'saving', 'saved', 'error'
+
+  const handleSaveForEveryone = async () => {
+    if (!canSaveForEveryone) return;
+    setSaveDefaultState('saving');
+    try {
+      await updateTeamspace(activeTeamspaceId, {
+        defaultTaskFilters: { conjunction: filterConj, rules: filterRules },
+      });
+      setSaveDefaultState('saved');
+      setTimeout(() => setSaveDefaultState(''), 2500);
+    } catch (err) {
+      console.error(err);
+      setSaveDefaultState('error');
+      setTimeout(() => setSaveDefaultState(''), 3000);
+    }
   };
 
+  // Apply the teamspace's saved default filters when this user has none set
+  useEffect(() => {
+    if (!activeTeamspaceId || activeTeamspaceId === '__personal__') return;
+    if (filterRules.length > 0) return;
+    getTeamspaces().then(res => {
+      const ts = res.data.find(t => t._id === activeTeamspaceId);
+      const d = ts?.defaultTaskFilters;
+      if (!d || !Array.isArray(d.rules) || d.rules.length === 0) return;
+      setFilterRules(d.rules);
+      if (d.conjunction) setFilterConj(d.conjunction);
+    }).catch(() => {});
+  }, [activeTeamspaceId]);
+
   const clearFilters = () => {
-    setFilterAssignee('');
-    setFilterProject('');
-    setFilterSprint('');
-    setFilterStatus('');
-    setFilterPriority('');
-    setFilterDateFrom('');
-    setFilterDateTo('');
+    setFilterRules([]);
     setSearchQuery('');
-    setOpenFilter(null);
   };
 
   if (selectedTask) {
@@ -327,77 +444,83 @@ export default function TasksPage() {
               Filter
             </button>
 
-            {/* Filter panel */}
+            {/* Filter panel — Notion-style rule builder */}
             {openFilter && (
-              <div className="filter-panel animate-in" onClick={e => e.stopPropagation()}>
+              <div className="filter-panel filter-panel-rules animate-in" onClick={e => e.stopPropagation()}>
                 <div className="filter-panel-header">
-                  <span>Filter by</span>
+                  <span>Filters</span>
                   <button className="btn-icon" onClick={() => setOpenFilter(null)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>
                 </div>
 
-                {/* Assignee */}
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Assignee</span>
-                  <select className="filter-panel-select" value={filterAssignee} onChange={e => { setFilterAssignee(e.target.value); }}>
-                    <option value="">Any assignee</option>
-                    {teamMembers.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
-                  </select>
-                </div>
+                {filterRules.length === 0 && (
+                  <p className="filter-panel-hint" style={{ margin: '8px 16px' }}>No filters yet. Add one below — e.g. Assignee is Pooja, Due date is after a day, Status is not Completed.</p>
+                )}
 
-                {/* Status */}
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Status</span>
-                  <select className="filter-panel-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                    <option value="">Any status</option>
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
+                {filterRules.map((r, i) => {
+                  const type = FILTER_FIELDS[r.field].type;
+                  const needsValue = !NO_VALUE_OPS.includes(r.op);
+                  return (
+                    <div className="fr-row" key={r.id}>
+                      <span className="fr-conj">
+                        {i === 0 ? 'Where' : (
+                          i === 1 ? (
+                            <select className="fr-select fr-conj-select" value={filterConj} onChange={e => setFilterConj(e.target.value)}>
+                              <option value="and">And</option>
+                              <option value="or">Or</option>
+                            </select>
+                          ) : (filterConj === 'and' ? 'And' : 'Or')
+                        )}
+                      </span>
+                      <select className="fr-select fr-field" value={r.field} onChange={e => updateRule(r.id, { field: e.target.value })}>
+                        {Object.entries(FILTER_FIELDS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
+                      </select>
+                      <select className="fr-select fr-op" value={r.op} onChange={e => updateRule(r.id, { op: e.target.value, ...(NO_VALUE_OPS.includes(e.target.value) ? { value: '' } : {}) })}>
+                        {FILTER_OPS[type].map(([op, label]) => <option key={op} value={op}>{label}</option>)}
+                      </select>
+                      {needsValue && type === 'select' && (
+                        <select className="fr-select fr-value" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })}>
+                          <option value="">Select…</option>
+                          {r.field === 'assignee' && teamMembers.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
+                          {r.field === 'project' && projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                          {r.field === 'sprint' && sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                          {r.field === 'status' && STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                          {r.field === 'priority' && PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      )}
+                      {needsValue && type === 'date' && (
+                        <input className="fr-select fr-value" type="date" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
+                      )}
+                      {needsValue && type === 'text' && (
+                        <input className="fr-select fr-value" type="text" placeholder="Type a value…" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
+                      )}
+                      <button className="btn-icon fr-remove" onClick={() => removeRule(r.id)} title="Remove filter">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  );
+                })}
 
-                {/* Priority */}
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Priority</span>
-                  <select className="filter-panel-select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
-                    <option value="">Any priority</option>
-                    {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
+                <button className="fr-add" onClick={() => addRule()}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add filter
+                </button>
 
-                {/* Project */}
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Project</span>
-                  <select className="filter-panel-select" value={filterProject} onChange={e => setFilterProject(e.target.value)}>
-                    <option value="">Any project</option>
-                    {projects.map(p => <option key={p._id} value={p._id}>{p.icon} {p.name}</option>)}
-                  </select>
-                </div>
-
-                {/* Sprint */}
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Sprint</span>
-                  <select className="filter-panel-select" value={filterSprint} onChange={e => setFilterSprint(e.target.value)}>
-                    <option value="">Any sprint</option>
-                    {sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                  </select>
-                </div>
-
-                {/* Due Date range */}
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Due after</span>
-                  <input className="filter-panel-date" type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
-                </div>
-                <div className="filter-panel-row">
-                  <span className="filter-panel-label">Due before</span>
-                  <input className="filter-panel-date" type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
-                </div>
-
-                <div className="filter-panel-footer" style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                  {activeFilters.length > 0 && (
-                    <button className="filter-clear-all" onClick={clearFilters} style={{ flex: 1 }}>Clear</button>
+                <div className="filter-panel-footer">
+                  <button className="btn btn-ghost btn-sm" onClick={clearFilters} disabled={filterRules.length === 0}>Clear all</button>
+                  {canSaveForEveryone && (
+                    <button className="btn btn-primary btn-sm" onClick={handleSaveForEveryone} disabled={saveDefaultState === 'saving'}>
+                      {saveDefaultState === 'saving' ? 'Saving…' : saveDefaultState === 'saved' ? '✓ Saved for team' : 'Save for everyone'}
+                    </button>
                   )}
-                  <button className="btn btn-sm btn-primary" onClick={handleSaveForEveryone} style={{ flex: 2 }}>Save for everyone</button>
                 </div>
+                {saveDefaultState === 'error' && (
+                  <p className="filter-panel-hint filter-panel-error">Could not save the team default — try again.</p>
+                )}
+                {canSaveForEveryone && saveDefaultState === '' && filterRules.length > 0 && (
+                  <p className="filter-panel-hint">Saves these filters as the default for every member of this teamspace.</p>
+                )}
               </div>
             )}
           </div>
@@ -591,39 +714,24 @@ export default function TasksPage() {
 
         {/* Table View */}
         {viewType === 'table' && (
-          <div className="table-wrapper">
-            <table className="task-table">
-              <thead>
-                <tr><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Est. Hours</th><th>Actual Hours</th><th>Due Date</th><th>Created</th><th></th></tr>
-              </thead>
-              <tbody>
-                {filteredTasks.map((task, i) => (
-                  <tr key={task.id} className="animate-in" style={{ animationDelay: `${i * 0.03}s` }}>
-                    <td className="table-title" onClick={() => setSelectedTask(task)}>{task.title}</td>
-                    <td className="table-project">{task.projectId ? getProjectName(task.projectId) : '—'}</td>
-                    <td>
-                      <select className="table-status-select" value={task.status} onChange={(e) => handleStatusChange(task.id, e.target.value)} disabled={!canEditTask(task)}>
-                        {STATUSES.map(s => <option key={s} value={s} disabled={!canChangeStatusTo(task, s)}>{s}</option>)}
-                      </select>
-                    </td>
-                    <td className="table-assignee">{task.assignee || '—'}</td>
-                    <td className="table-hours">{task.estimatedHours || 0}h</td>
-                    <td className="table-hours">{task.actualHours || 0}h</td>
-                    <td className="table-date">{formatDate(task.dueDate) || '—'}</td>
-                    <td className="table-date">{formatDate(task.createdDate)}</td>
-                    <td>
-                      {canEditTask(task) && (
-                        <button className="btn-icon" onClick={() => handleDelete(task.id)} title="Delete">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filteredTasks.length === 0 && <div className="empty-state" style={{ marginTop: 32 }}><p>No tasks match.</p></div>}
-          </div>
+          <TaskTable
+            tasks={filteredTasks}
+            projects={projects}
+            sprints={sprints}
+            teamMembers={teamMembers}
+            statuses={STATUSES}
+            priorities={PRIORITIES}
+            priorityColor={PRIORITY_COLOR}
+            canEditTask={canEditTask}
+            canChangeStatusTo={canChangeStatusTo}
+            onStatusChange={handleStatusChange}
+            onInlineUpdate={handleInlineUpdate}
+            onDelete={handleDelete}
+            onOpen={setSelectedTask}
+            onFilter={applyColumnFilter}
+            formatDate={formatDate}
+            renderAvatar={renderAvatar}
+          />
         )}
       </div>
     </div>

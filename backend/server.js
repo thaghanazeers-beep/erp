@@ -300,7 +300,7 @@ app.use('/api', requireAuth);
 app.get('/api/auth/me', (req, res) => res.json(req.user));
 
 // ==================== TEAMSPACE ROUTES ====================
-const TEAMSPACE_FIELDS = ['name', 'description', 'icon', 'members', 'isPersonal'];
+const TEAMSPACE_FIELDS = ['name', 'description', 'icon', 'members', 'isPersonal', 'defaultTaskFilters'];
 
 app.get('/api/teamspaces', async (req, res) => {
   try {

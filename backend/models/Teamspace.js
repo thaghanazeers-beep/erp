@@ -10,6 +10,9 @@ const teamspaceSchema = new mongoose.Schema({
     role: { type: String, enum: ['Admin', 'Member', 'Viewer'], default: 'Member' }
   }],
   isPersonal: { type: Boolean, default: false },
+  // Task filters an Admin/owner saved as the team-wide default ("Save for
+  // everyone") — applied for members who have no filters of their own.
+  defaultTaskFilters: { type: mongoose.Schema.Types.Mixed, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
