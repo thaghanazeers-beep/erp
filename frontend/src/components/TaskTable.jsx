@@ -31,6 +31,53 @@ const GROUP_OPTIONS = [
   { key: 'sprint',   label: 'Sprint' },
 ];
 
+const PROPERTY_TYPES = [
+  ['text', 'Text'], ['number', 'Number'], ['select', 'Select'], ['multiSelect', 'Multi-select'],
+  ['date', 'Date'], ['checkbox', 'Checkbox'], ['url', 'URL'], ['email', 'Email'], ['phone', 'Phone'],
+];
+
+/** "+ New property" form inside the Columns popover */
+function NewPropertyForm({ onCreate }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [type, setType] = useState('text');
+  const [options, setOptions] = useState('');
+
+  if (!open) {
+    return (
+      <button className="fr-add" style={{ margin: '4px 6px 2px' }} onClick={() => setOpen(true)}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New property
+      </button>
+    );
+  }
+  const needsOptions = type === 'select' || type === 'multiSelect';
+  const submit = () => {
+    if (!name.trim()) return;
+    onCreate({
+      name: name.trim(),
+      type,
+      options: needsOptions ? options.split(',').map(s => s.trim()).filter(Boolean) : [],
+    });
+    setName(''); setType('text'); setOptions(''); setOpen(false);
+  };
+  return (
+    <div className="tt-newprop">
+      <input className="fr-select" placeholder="Property name" value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      <select className="fr-select" value={type} onChange={(e) => setType(e.target.value)}>
+        {PROPERTY_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+      {needsOptions && (
+        <input className="fr-select" placeholder="Options (comma separated)" value={options} onChange={(e) => setOptions(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      )}
+      <div className="tt-newprop-actions">
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={submit} disabled={!name.trim()}>Add</button>
+      </div>
+    </div>
+  );
+}
+
 export default function TaskTable({
   tasks, projects, sprints, teamMembers,
   statuses, priorities, priorityColor,
@@ -42,6 +89,8 @@ export default function TaskTable({
   sorts = [], groupBy = '', hidden = [],
   columnOrder = [], columnWidths = null, calcs = null,
   onPrefsChange, // ({ sorts? | groupBy? | hiddenColumns? | columnOrder? | columnWidths? | calcs? })
+  // Custom database properties (Notion-style)
+  customProps = [], onCreateProperty, onDeleteProperty,
 }) {
   // Collapsed groups are personal (not part of the shared view)
   const [collapsed, setCollapsed] = useState({});
@@ -78,7 +127,21 @@ export default function TaskTable({
   };
   const sprintName = (id) => sprints.find(s => s._id === id)?.name || '';
 
+  const cpDef = (key) => customProps.find(d => `cp_${d.id}` === key);
+  const cpRaw = (t, key) => t.customProperties?.find(p => `cp_${p.definitionId}` === key)?.value;
+
   const cellValue = (t, key) => {
+    if (key.startsWith('cp_')) {
+      const def = cpDef(key);
+      const raw = cpRaw(t, key);
+      switch (def?.type) {
+        case 'number': return raw == null || raw === '' ? -Infinity : Number(raw);
+        case 'date': return raw ? new Date(raw).getTime() : Infinity;
+        case 'checkbox': return raw === true ? 0 : 1;
+        case 'multiSelect': return (Array.isArray(raw) ? raw.join(', ') : '').toLowerCase();
+        default: return String(raw ?? '').toLowerCase();
+      }
+    }
     switch (key) {
       case 'project': return projectName(t.projectId);
       case 'sprint': return sprintName(t.sprintId);
@@ -138,14 +201,25 @@ export default function TaskTable({
     return [...map.entries()].map(([name, rows]) => ({ name, rows }));
   }, [sorted, groupBy, projects, sprints]);
 
+  // Built-in columns + one column per custom property definition
+  const allColumns = useMemo(() => [
+    ...COLUMNS,
+    ...customProps.map(d => ({
+      key: `cp_${d.id}`,
+      label: d.name,
+      cp: d,
+      filterKey: ['select', 'multiSelect'].includes(d.type) ? `cp_${d.id}` : undefined,
+    })),
+  ], [customProps]);
+
   // Column order: view-defined, unknown/new columns appended; title stays first
   const orderedCols = useMemo(() => {
-    const byKey = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
+    const byKey = Object.fromEntries(allColumns.map(c => [c.key, c]));
     const ordered = (columnOrder || []).filter(k => byKey[k]).map(k => byKey[k]);
-    const rest = COLUMNS.filter(c => !ordered.includes(c));
+    const rest = allColumns.filter(c => !ordered.includes(c));
     const all = [...ordered, ...rest];
     return [all.find(c => c.key === 'title'), ...all.filter(c => c.key !== 'title')];
-  }, [columnOrder]);
+  }, [columnOrder, allColumns]);
   const visibleCols = orderedCols.filter(c => c.always || !hidden.includes(c.key));
 
   const moveColumn = (fromKey, toKey) => {
@@ -183,10 +257,15 @@ export default function TaskTable({
   };
 
   // Footer "Calculate" (Notion-style aggregates over the filtered rows)
-  const NUMERIC_COLS = ['estimatedHours', 'actualHours'];
+  const isNumericCol = (key) => ['estimatedHours', 'actualHours'].includes(key) || cpDef(key)?.type === 'number';
+  const numericValue = (t, key) => key.startsWith('cp_') ? (Number(cpRaw(t, key)) || 0) : (Number(t[key]) || 0);
   const CALC_OPTIONS_BASE = [['', 'None'], ['count', 'Count all'], ['count_empty', 'Count empty'], ['count_not_empty', 'Count not empty']];
   const CALC_OPTIONS_NUM = [...CALC_OPTIONS_BASE, ['sum', 'Sum'], ['avg', 'Average']];
   const isEmptyCell = (t, key) => {
+    if (key.startsWith('cp_')) {
+      const raw = cpRaw(t, key);
+      return raw == null || raw === '' || raw === false || (Array.isArray(raw) && raw.length === 0);
+    }
     switch (key) {
       case 'project': return !t.projectId;
       case 'sprint': return !t.sprintId;
@@ -204,12 +283,13 @@ export default function TaskTable({
     const op = calcs?.[key];
     if (!op) return null;
     const rows = sorted;
+    const unit = key.startsWith('cp_') ? '' : 'h';
     if (op === 'count') return `Count ${rows.length}`;
     if (op === 'count_empty') return `Empty ${rows.filter(t => isEmptyCell(t, key)).length}`;
     if (op === 'count_not_empty') return `Not empty ${rows.filter(t => !isEmptyCell(t, key)).length}`;
-    const sum = rows.reduce((acc, t) => acc + (Number(t[key]) || 0), 0);
-    if (op === 'sum') return `Sum ${Math.round(sum * 10) / 10}h`;
-    if (op === 'avg') return `Avg ${rows.length ? Math.round((sum / rows.length) * 10) / 10 : 0}h`;
+    const sum = rows.reduce((acc, t) => acc + numericValue(t, key), 0);
+    if (op === 'sum') return `Sum ${Math.round(sum * 10) / 10}${unit}`;
+    if (op === 'avg') return `Avg ${rows.length ? Math.round((sum / rows.length) * 10) / 10 : 0}${unit}`;
     return null;
   };
   const setCalc = (key, op) => {
@@ -220,6 +300,7 @@ export default function TaskTable({
   };
 
   const distinctFilterValues = (col) => {
+    if (col.cp) return (col.cp.options || []).map(o => ({ value: o, label: o }));
     switch (col.filterKey) {
       case 'assignee': return [...new Set(tasks.map(t => t.assignee).filter(Boolean))].sort().map(v => ({ value: v, label: v }));
       case 'status': return statuses.map(s => ({ value: s, label: s }));
@@ -243,7 +324,7 @@ export default function TaskTable({
   const removeSortRule = (i) => setSorts(prev => prev.filter((_, idx) => idx !== i));
   const addSortRule = () => {
     const used = new Set(sorts.map(s => s.key));
-    const next = COLUMNS.find(c => !used.has(c.key));
+    const next = allColumns.find(c => !used.has(c.key));
     if (next) setSorts(prev => [...prev, { key: next.key, dir: 1 }]);
   };
   const hideColumn = (key) => {
@@ -255,8 +336,77 @@ export default function TaskTable({
   };
   const toggleGroup = (name) => setCollapsed({ ...collapsed, [name]: !collapsed[name] });
 
+  // Write a custom-property value back onto the task
+  const setCpValue = (task, defId, value) => {
+    const rest = (task.customProperties || []).filter(p => p.definitionId !== defId);
+    const cleared = value == null || value === '' || (Array.isArray(value) && value.length === 0);
+    onInlineUpdate(task.id, { customProperties: cleared ? rest : [...rest, { definitionId: defId, value }] });
+  };
+
+  const renderCpCell = (task, def, editable) => {
+    const raw = cpRaw(task, `cp_${def.id}`);
+    if (!editable) {
+      if (def.type === 'checkbox') return <input type="checkbox" checked={raw === true} disabled />;
+      if (def.type === 'multiSelect') return <span className="tt-muted">{Array.isArray(raw) && raw.length ? raw.join(', ') : '—'}</span>;
+      return <span className="tt-muted">{raw ?? '—'}</span>;
+    }
+    switch (def.type) {
+      case 'checkbox':
+        return <input type="checkbox" className="tt-cp-check" checked={raw === true} onChange={(e) => setCpValue(task, def.id, e.target.checked)} />;
+      case 'select':
+        return (
+          <select className="tt-select" value={raw || ''} onChange={(e) => setCpValue(task, def.id, e.target.value)}>
+            <option value="">—</option>
+            {(def.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        );
+      case 'multiSelect':
+        return (
+          <select
+            className="tt-select"
+            value=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) return;
+              const cur = Array.isArray(raw) ? raw : [];
+              setCpValue(task, def.id, cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v]);
+            }}
+          >
+            <option value="">{Array.isArray(raw) && raw.length ? raw.join(', ') : '—'}</option>
+            {(def.options || []).map(o => (
+              <option key={o} value={o}>{Array.isArray(raw) && raw.includes(o) ? `✓ ${o}` : o}</option>
+            ))}
+          </select>
+        );
+      case 'date':
+        return <input type="date" className="tt-cell-input" value={raw ? String(raw).slice(0, 10) : ''} onChange={(e) => setCpValue(task, def.id, e.target.value)} />;
+      case 'number':
+        return (
+          <input
+            type="number"
+            className="tt-cell-input"
+            key={`${task.id}_${raw ?? ''}`}
+            defaultValue={raw ?? ''}
+            onBlur={(e) => { if (e.target.value !== String(raw ?? '')) setCpValue(task, def.id, e.target.value === '' ? '' : Number(e.target.value)); }}
+          />
+        );
+      default: // text, url, email, phone
+        return (
+          <input
+            type="text"
+            className="tt-cell-input"
+            key={`${task.id}_${raw ?? ''}`}
+            defaultValue={raw ?? ''}
+            placeholder="—"
+            onBlur={(e) => { if (e.target.value !== String(raw ?? '')) setCpValue(task, def.id, e.target.value); }}
+          />
+        );
+    }
+  };
+
   const renderCell = (task, col) => {
     const editable = canEditTask(task);
+    if (col.cp) return renderCpCell(task, col.cp, editable);
     switch (col.key) {
       case 'title':
         return <span className="tt-title" onClick={() => onOpen(task)}>{task.title}</span>;
@@ -332,7 +482,7 @@ export default function TaskTable({
                   <div className="tt-sort-row" key={`${s.key}-${i}`}>
                     <span className="tt-sort-then">{i === 0 ? 'Sort by' : 'then by'}</span>
                     <select className="fr-select" value={s.key} onChange={(e) => updateSortRule(i, { key: e.target.value })}>
-                      {COLUMNS.filter(c => c.key === s.key || !sorts.some(x => x.key === c.key)).map(c => (
+                      {allColumns.filter(c => c.key === s.key || !sorts.some(x => x.key === c.key)).map(c => (
                         <option key={c.key} value={c.key}>{c.label}</option>
                       ))}
                     </select>
@@ -361,12 +511,23 @@ export default function TaskTable({
             {showColumns && (
               <div className="tt-popover tt-columns-popover">
                 <div className="tt-popover-title">Shown in table</div>
-                {COLUMNS.filter(c => !c.always).map(c => (
+                {allColumns.filter(c => !c.always).map(c => (
                   <label key={c.key} className="tt-popover-row">
                     <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => toggleColumn(c.key)} />
-                    <span>{c.label}</span>
+                    <span className="tt-popover-row-label">{c.label}</span>
+                    {c.cp && onDeleteProperty && (
+                      <button
+                        className="btn-icon tt-prop-delete"
+                        style={{ width: 20, height: 20 }}
+                        title="Delete property"
+                        onClick={(e) => { e.preventDefault(); onDeleteProperty(c.cp.id); }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                      </button>
+                    )}
                   </label>
                 ))}
+                {onCreateProperty && <NewPropertyForm onCreate={onCreateProperty} />}
               </div>
             )}
           </div>
@@ -505,7 +666,7 @@ export default function TaskTable({
                     </button>
                     {calcCol === col.key && (
                       <div className="tt-popover tt-calc-menu">
-                        {(NUMERIC_COLS.includes(col.key) ? CALC_OPTIONS_NUM : CALC_OPTIONS_BASE).map(([op, label]) => (
+                        {(isNumericCol(col.key) ? CALC_OPTIONS_NUM : CALC_OPTIONS_BASE).map(([op, label]) => (
                           <button
                             key={op || 'none'}
                             className={`tt-menu-item ${(calcs?.[col.key] || '') === op ? 'tt-menu-item-active' : ''}`}

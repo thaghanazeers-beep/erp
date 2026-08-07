@@ -963,6 +963,18 @@ app.post('/api/properties', async (req, res) => {
   }
 });
 
+// Deleting a property definition also strips its values from every task
+app.delete('/api/properties/:id', requireAdmin, async (req, res) => {
+  try {
+    const prop = await PropertyDefinition.findOneAndDelete({ id: req.params.id });
+    if (!prop) return res.status(404).json({ message: 'Property not found' });
+    await Task.updateMany({}, { $pull: { customProperties: { definitionId: req.params.id } } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== WORKFLOW ROUTES (writes are Admin-only) ====================
 const WORKFLOW_FIELDS = ['name', 'description', 'icon', 'color', 'enabled', 'trigger', 'conditions', 'actions'];
 

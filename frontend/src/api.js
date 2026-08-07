@@ -119,6 +119,11 @@ export const deleteTeamspace = (id) => API.delete(`/teamspaces/${id}`);
 // Shared task views (Notion-style) — any member of the teamspace may edit
 export const updateTeamspaceViews = (id, views) => API.put(`/teamspaces/${id}/views`, { views });
 
+// Custom property definitions (Notion-style database properties)
+export const getProperties = () => API.get('/properties');
+export const createProperty = (def) => API.post('/properties', def);
+export const deleteProperty = (id) => API.delete(`/properties/${id}`);
+
 // Org Chart
 export const getOrgChart = (teamspaceId) => API.get('/orgchart', { params: teamspaceId ? { teamspaceId } : {} });
 export const saveOrgChart = (data) => API.put('/orgchart', data);

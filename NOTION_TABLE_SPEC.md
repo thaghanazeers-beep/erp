@@ -182,7 +182,7 @@ always win afterwards.
 | Per-view (per-tab) filter/sort config | ✅ v5 — views stored on the teamspace, shared, member-editable, debounced auto-save |
 | Column drag-reorder + resize | ✅ v5 — persisted per view |
 | Footer aggregates (sum/count per column) | ✅ v5 — Calculate row: count / count empty / count not empty / sum / average |
-| Custom property types on tasks | ❌ schema exists (`customProperties`), no UI |
+| Custom property types on tasks | ✅ v5 — create/delete properties (9 types), dynamic columns with typed editors, typed filter operators, sort + Calculate support |
 
 ---
 

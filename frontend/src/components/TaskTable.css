@@ -245,3 +245,40 @@
 .tt-calc-row td:hover .tt-calc-hint { opacity: 1; }
 .tt-calc-menu { bottom: calc(100% + 2px); right: 0; min-width: 160px; }
 .tt-menu-item-active { background: var(--primary-tint); }
+
+/* ── Custom property cells + creation form ── */
+.tt-cell-input {
+  width: 100%;
+  min-width: 90px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+}
+.tt-cell-input:hover { background: var(--bg-hover); }
+.tt-cell-input:focus { border-color: var(--border-light); background: var(--bg-card); }
+.tt-cp-check { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
+
+.tt-popover-row-label { flex: 1; }
+.tt-prop-delete { opacity: 0; color: var(--text-muted); }
+.tt-popover-row:hover .tt-prop-delete { opacity: 1; }
+.tt-prop-delete:hover { color: var(--accent-red) !important; }
+
+.tt-newprop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.tt-newprop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

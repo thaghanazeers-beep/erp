@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getTasks, createTask, updateTask, deleteTask, getTeam, getProjects, getSprints, getTeamspaces, updateTeamspaceViews } from '../api';
+import { getTasks, createTask, updateTask, deleteTask, getTeam, getProjects, getSprints, getTeamspaces, updateTeamspaceViews, getProperties, createProperty, deleteProperty } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import TaskDetailPage from './TaskDetailPage';
@@ -97,6 +97,15 @@ export default function TasksPage() {
   const PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'];
   const PRIORITY_COLOR = { Urgent: '#d44c47', High: '#d9730d', Medium: '#2383e2', Low: '#2e9e6b' };
 
+  // Custom property definitions (Notion-style database properties)
+  const [customProps, setCustomProps] = useState([]);
+  const cpValue = (t, defId) => t.customProperties?.find(p => p.definitionId === defId)?.value;
+  const CP_FILTER_TYPE = {
+    text: 'text', url: 'text', email: 'text', phone: 'text',
+    number: 'number', date: 'date', select: 'select',
+    multiSelect: 'multiselect', checkbox: 'checkbox',
+  };
+
   // Filterable fields and their operators (Notion-style)
   const FILTER_FIELDS = {
     title:    { label: 'Task name', type: 'text' },
@@ -106,6 +115,9 @@ export default function TasksPage() {
     status:   { label: 'Status',    type: 'select' },
     priority: { label: 'Priority',  type: 'select' },
     dueDate:  { label: 'Due date',  type: 'date' },
+    ...Object.fromEntries(customProps.map(d => [
+      `cp_${d.id}`, { label: d.name, type: CP_FILTER_TYPE[d.type] || 'text', cp: d },
+    ])),
   };
   const FILTER_OPS = {
     text: [
@@ -117,13 +129,24 @@ export default function TasksPage() {
       ['is_any_of', 'is any of'], ['is_none_of', 'is none of'],
       ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
     ],
+    multiselect: [
+      ['m_contains', 'contains'], ['m_not_contains', "doesn't contain"],
+      ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
+    ],
     date: [
       ['is', 'is'], ['before', 'is before'], ['after', 'is after'],
       ['on_or_before', 'is on or before'], ['on_or_after', 'is on or after'],
       ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
     ],
+    number: [
+      ['eq', '='], ['neq', '≠'], ['gt', '>'], ['lt', '<'], ['gte', '≥'], ['lte', '≤'],
+      ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
+    ],
+    checkbox: [
+      ['is_checked', 'is checked'], ['is_unchecked', 'is unchecked'],
+    ],
   };
-  const NO_VALUE_OPS = ['is_empty', 'is_not_empty'];
+  const NO_VALUE_OPS = ['is_empty', 'is_not_empty', 'is_checked', 'is_unchecked'];
 
   // Relative date values (Notion-style) — stored as @tokens, resolved at
   // evaluation time so "is after today" stays correct tomorrow.
@@ -145,6 +168,10 @@ export default function TasksPage() {
 
   const MULTI_OPS = ['is_any_of', 'is_none_of'];
   const fieldOptions = (field) => {
+    if (field.startsWith('cp_')) {
+      const def = customProps.find(d => d.id === field.slice(3));
+      return (def?.options || []).map(o => ({ v: o, l: o }));
+    }
     switch (field) {
       case 'assignee': return teamMembers.map(m => ({ v: m.name, l: m.name }));
       case 'project': return projects.map(p => ({ v: p._id, l: p.name }));
@@ -176,7 +203,25 @@ export default function TasksPage() {
     fetchTeam();
     fetchProjects();
     fetchSprints();
+    getProperties().then(res => setCustomProps(res.data)).catch(() => {});
   }, [activeTeamspaceId]);
+
+  const handleCreateProperty = async (def) => {
+    try {
+      await createProperty({ id: `p_${Date.now()}`, ...def });
+      const res = await getProperties();
+      setCustomProps(res.data);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDeleteProperty = async (id) => {
+    if (!confirm('Delete this property for the whole workspace? Its values on every task are removed too.')) return;
+    try {
+      await deleteProperty(id);
+      setCustomProps(prev => prev.filter(p => p.id !== id));
+      fetchTasks();
+    } catch (err) { console.error(err); }
+  };
 
   const fetchTasks = async () => {
     try {
@@ -315,10 +360,13 @@ export default function TasksPage() {
   };
 
   // ── Filter rule evaluation ──────────────────────────────
-  const ruleRaw = (t, field) => ({
-    title: t.title, assignee: t.assignee, project: t.projectId, sprint: t.sprintId,
-    status: t.status, priority: t.priority, dueDate: t.dueDate,
-  })[field];
+  const ruleRaw = (t, field) => {
+    if (field.startsWith('cp_')) return cpValue(t, field.slice(3));
+    return {
+      title: t.title, assignee: t.assignee, project: t.projectId, sprint: t.sprintId,
+      status: t.status, priority: t.priority, dueDate: t.dueDate,
+    }[field];
+  };
 
   const sameDay = (a, b) => {
     const d = new Date(a);
@@ -330,11 +378,16 @@ export default function TasksPage() {
     const raw = ruleRaw(t, r.field);
     const type = FILTER_FIELDS[r.field]?.type;
     const val = type === 'date' ? resolveDateValue(r.value) : r.value;
+    const empty = raw == null || raw === '' || (Array.isArray(raw) && raw.length === 0);
     switch (r.op) {
-      case 'is_empty': return !raw;
-      case 'is_not_empty': return !!raw;
+      case 'is_empty': return empty;
+      case 'is_not_empty': return !empty;
+      case 'is_checked': return raw === true;
+      case 'is_unchecked': return raw !== true;
       case 'contains': return String(raw || '').toLowerCase().includes(String(val || '').toLowerCase());
       case 'not_contains': return !String(raw || '').toLowerCase().includes(String(val || '').toLowerCase());
+      case 'm_contains': return Array.isArray(raw) && raw.includes(val);
+      case 'm_not_contains': return !Array.isArray(raw) || !raw.includes(val);
       case 'is': return type === 'date' ? (!!raw && sameDay(raw, val)) : raw === val;
       case 'is_not': return type === 'date' ? (!raw || !sameDay(raw, val)) : raw !== val;
       case 'is_any_of': return Array.isArray(val) && val.includes(raw);
@@ -343,6 +396,12 @@ export default function TasksPage() {
       case 'after': return !!raw && new Date(raw) > new Date(val + 'T23:59:59');
       case 'on_or_before': return !!raw && new Date(raw) <= new Date(val + 'T23:59:59');
       case 'on_or_after': return !!raw && new Date(raw) >= new Date(val + 'T00:00:00');
+      case 'eq': return !empty && Number(raw) === Number(val);
+      case 'neq': return empty || Number(raw) !== Number(val);
+      case 'gt': return !empty && Number(raw) > Number(val);
+      case 'lt': return !empty && Number(raw) < Number(val);
+      case 'gte': return !empty && Number(raw) >= Number(val);
+      case 'lte': return !empty && Number(raw) <= Number(val);
       default: return true;
     }
   };
@@ -601,6 +660,15 @@ export default function TasksPage() {
                       {needsValue && type === 'text' && (
                         <input className="fr-select fr-value" type="text" placeholder="Type a value…" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
                       )}
+                      {needsValue && type === 'number' && (
+                        <input className="fr-select fr-value" type="number" placeholder="0" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
+                      )}
+                      {needsValue && type === 'multiselect' && (
+                        <select className="fr-select fr-value" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })}>
+                          <option value="">Select…</option>
+                          {fieldOptions(r.field).map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                        </select>
+                      )}
                       <button className="btn-icon fr-remove" onClick={() => removeRule(r.id)} title="Remove filter">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                       </button>
@@ -839,6 +907,9 @@ export default function TasksPage() {
             columnWidths={activeView.columnWidths || null}
             calcs={activeView.calcs || null}
             onPrefsChange={patchActiveView}
+            customProps={customProps}
+            onCreateProperty={handleCreateProperty}
+            onDeleteProperty={isAdminOrOwner ? handleDeleteProperty : null}
           />
         )}
       </div>
