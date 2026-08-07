@@ -98,7 +98,7 @@ export default function TeamSettingsPage() {
                   <tr key={m._id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'linear-gradient(135deg, var(--primary), var(--accent-green))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>
                           {m.name?.charAt(0)?.toUpperCase()}
                         </div>
                         <span style={{ fontWeight: 600 }}>{m.name}</span>
@@ -112,7 +112,7 @@ export default function TeamSettingsPage() {
                     </td>
                     <td>
                       {orgRole ? (
-                        <span style={{ background: 'rgba(108,92,231,0.12)', color: 'var(--primary-light)', padding: '2px 10px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600 }}>{orgRole}</span>
+                        <span style={{ background: 'var(--primary-tint)', color: 'var(--primary-light)', padding: '2px 10px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600 }}>{orgRole}</span>
                       ) : (
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>
                       )}

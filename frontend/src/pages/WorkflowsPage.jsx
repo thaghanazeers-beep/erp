@@ -39,7 +39,7 @@ const OPERATORS = [
 ];
 
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
-const WF_COLORS = ['#6c5ce7','#00cec9','#fd79a8','#fdcb6e','#74b9ff','#ff6b6b','#55efc4','#a29bfe'];
+const WF_COLORS = ['#2383e2','#0d9488','#c14c8a','#d9730d','#2e9e6b','#d44c47','#8a63d2','#b7791f'];
 
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState([]);
@@ -53,7 +53,7 @@ export default function WorkflowsPage() {
   // Builder state
   const [wfName, setWfName] = useState('');
   const [wfDesc, setWfDesc] = useState('');
-  const [wfColor, setWfColor] = useState('#6c5ce7');
+  const [wfColor, setWfColor] = useState('#2383e2');
   const [wfTrigger, setWfTrigger] = useState(null);
   const [wfTriggerConfig, setWfTriggerConfig] = useState({});
   const [wfConditions, setWfConditions] = useState([]);
@@ -99,14 +99,14 @@ export default function WorkflowsPage() {
       setEditingWfId(wf._id);
       setWfName(wf.name || '');
       setWfDesc(wf.description || '');
-      setWfColor(wf.color || '#6c5ce7');
+      setWfColor(wf.color || '#2383e2');
       setWfTrigger(wf.trigger?.type || null);
       setWfTriggerConfig(wf.trigger?.config || {});
       setWfConditions(wf.conditions || []);
       setWfActions(wf.actions || []);
     } else {
       setEditingWfId(null);
-      setWfName(''); setWfDesc(''); setWfColor('#6c5ce7');
+      setWfName(''); setWfDesc(''); setWfColor('#2383e2');
       setWfTrigger(null); setWfTriggerConfig({});
       setWfConditions([]); setWfActions([]);
     }

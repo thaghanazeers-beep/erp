@@ -21,10 +21,10 @@
 
 /* Flow chips */
 .wf-card-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.wf-flow-chip { padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-.wf-flow-chip.trigger { background: rgba(108,92,231,0.12); color: var(--primary-light); }
-.wf-flow-chip.condition { background: rgba(253,203,110,0.12); color: var(--accent-orange); }
-.wf-flow-chip.action { background: rgba(0,206,201,0.12); color: var(--accent-green); }
+.wf-flow-chip { padding: 3px 8px; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: 500; }
+.wf-flow-chip.trigger { background: rgba(35,131,226,0.12); color: var(--primary-light); }
+.wf-flow-chip.condition { background: rgba(217,115,13,0.12); color: var(--accent-orange); }
+.wf-flow-chip.action { background: rgba(46,158,107,0.12); color: var(--accent-green); }
 .wf-flow-arrow { color: var(--text-muted); font-size: 0.75rem; }
 
 .wf-card-footer { display: flex; justify-content: space-between; align-items: center; }
@@ -50,7 +50,7 @@
 .wf-trigger-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .wf-trigger-option { display: flex; align-items: flex-start; gap: 12px; padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; text-align: left; font-family: inherit; color: var(--text); transition: all var(--transition); }
 .wf-trigger-option:hover { border-color: var(--border-light); background: var(--bg-hover); }
-.wf-trigger-option.selected { border-color: var(--primary); background: rgba(108,92,231,0.06); }
+.wf-trigger-option.selected { border-color: var(--primary); background: rgba(35,131,226,0.06); }
 .wf-trigger-icon { font-size: 1.2rem; margin-top: 2px; }
 .wf-trigger-option strong { font-size: 0.85rem; display: block; }
 .wf-trigger-option p { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
@@ -84,7 +84,7 @@
 /* Logs */
 .wf-logs { padding: 16px 24px; max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .wf-log-item { padding: 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.wf-log-item.failed { border-color: rgba(255,107,107,0.3); }
+.wf-log-item.failed { border-color: rgba(212,76,71,0.3); }
 .wf-log-top { display: flex; align-items: center; gap: 8px; }
 .wf-log-status { font-weight: 700; }
 .wf-log-status.success { color: var(--accent-green); }

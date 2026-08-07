@@ -6,7 +6,7 @@ import ViewTabs from '../components/ViewTabs';
 import './ProjectsPage.css';
 
 const PROJECT_ICONS = ['📁', '🚀', '💼', '🎯', '📊', '🛠️', '🎨', '📝', '🔬', '🌐', '📱', '🏗️'];
-const PROJECT_COLORS = ['#6c5ce7', '#00cec9', '#fd79a8', '#fdcb6e', '#74b9ff', '#ff6b6b', '#55efc4', '#fab1a0', '#81ecec', '#a29bfe'];
+const PROJECT_COLORS = ['#2383e2', '#0d9488', '#c14c8a', '#d9730d', '#2e9e6b', '#d44c47', '#8a63d2', '#b7791f', '#0e7490', '#64748b'];
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
 
 const STATUS_DOT = {
@@ -35,7 +35,7 @@ export default function ProjectsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [icon, setIcon] = useState('📁');
-  const [color, setColor] = useState('#6c5ce7');
+  const [color, setColor] = useState('#2383e2');
 
   // Active project view
   const [activeProject, setActiveProject] = useState(null);
@@ -104,7 +104,7 @@ export default function ProjectsPage() {
     try {
       await createProject({ name, description, icon, color });
       setShowCreate(false);
-      setName(''); setDescription(''); setIcon('📁'); setColor('#6c5ce7');
+      setName(''); setDescription(''); setIcon('📁'); setColor('#2383e2');
       fetchAll();
     } catch (err) { console.error(err); }
   };

@@ -33,9 +33,9 @@
   cursor: grab;
   position: relative;
   background-image:
-    radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+    radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 32px 32px;
-  background-color: #0e0e1a;
+  background-color: var(--bg-surface);
 }
 .orgchart-canvas:active { cursor: grabbing; }
 
@@ -57,8 +57,8 @@
 /* ── Org Node ── */
 .org-node {
   position: absolute;
-  border: 1.5px solid;
-  border-radius: 10px;
+  border: 1px solid;
+  border-radius: var(--radius-lg);
   padding: 10px 14px;
   cursor: move;
   user-select: none;
@@ -69,7 +69,6 @@
   min-width: 140px;
 }
 .org-node:hover {
-  transform: translateY(-1px);
   z-index: 20;
 }
 .org-node:hover .org-node-actions {
@@ -86,9 +85,8 @@
 
 .org-node-role {
   font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   margin-bottom: 2px;
 }
 .org-node-name {
@@ -138,8 +136,8 @@
   color: var(--text-main);
 }
 .org-action-del:hover {
-  background: rgba(255, 77, 77, 0.15);
-  color: #ff4d4d;
+  background: rgba(212,76,71, 0.15);
+  color: #d44c47;
 }
 
 /* ── Legend ── */
@@ -149,7 +147,7 @@
   left: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   z-index: 20;
   min-width: 120px;
@@ -177,8 +175,8 @@
   animation: save-pulse 2s ease-in-out infinite;
 }
 @keyframes save-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.4); }
-  50%      { box-shadow: 0 0 0 6px rgba(108, 92, 231, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(35,131,226, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(35,131,226, 0); }
 }
 .orgchart-save-msg {
   font-size: 0.78rem;
@@ -188,18 +186,18 @@
   white-space: nowrap;
 }
 .orgchart-save-ok {
-  color: #00b894;
-  background: rgba(0, 184, 148, 0.1);
+  color: #2e9e6b;
+  background: rgba(46,158,107, 0.1);
 }
 .orgchart-save-err {
-  color: #ff4d4d;
-  background: rgba(255, 77, 77, 0.1);
+  color: #d44c47;
+  background: rgba(212,76,71, 0.1);
 }
 .orgchart-unsaved-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #fdcb6e;
+  background: #d9730d;
   flex-shrink: 0;
   animation: unsaved-blink 1.5s ease-in-out infinite;
 }

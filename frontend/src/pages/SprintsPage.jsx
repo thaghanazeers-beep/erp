@@ -14,10 +14,10 @@ const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'R
 
 const STATUS_COLOR = {
   'Not Yet Started': 'var(--text-muted)',
-  'In Progress':     'var(--accent-blue, #74b9ff)',
-  'In Review':       '#fdcb6e',
+  'In Progress':     'var(--accent-blue, #2383e2)',
+  'In Review':       '#d9730d',
   'Completed':       'var(--accent-green)',
-  'Rejected':        'var(--accent-red, #ff6b6b)',
+  'Rejected':        'var(--accent-red, #d44c47)',
 };
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -290,7 +290,7 @@ export default function SprintsPage() {
               <button className="btn btn-primary btn-sm" onClick={() => handleStart(activeSprint)}>▶ Start Sprint</button>
             )}
             {isAdmin && activeSprint.status === 'active' && (
-              <button className="btn btn-sm" style={{ background: '#00b894', color: '#fff' }}
+              <button className="btn btn-sm" style={{ background: 'var(--accent-green)', color: '#fff' }}
                 onClick={() => setShowComplete(activeSprint)}>✓ Complete Sprint</button>
             )}
             {isAdmin && <button className="btn btn-ghost btn-sm" onClick={() => setEditSprint({ ...activeSprint })}>Edit</button>}
@@ -509,7 +509,7 @@ export default function SprintsPage() {
                 <div className="modal-actions">
                   <div style={{ flex: 1 }} />
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowComplete(null)}>Cancel</button>
-                  <button className="btn btn-sm" style={{ background: '#00b894', color: '#fff' }} onClick={handleComplete}>
+                  <button className="btn btn-sm" style={{ background: 'var(--accent-green)', color: '#fff' }} onClick={handleComplete}>
                     ✓ Complete Sprint
                   </button>
                 </div>

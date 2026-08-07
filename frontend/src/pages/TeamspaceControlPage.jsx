@@ -88,7 +88,7 @@ export default function TeamspaceControlPage() {
           {teamspaces.map(ts => {
             const isActive = activeTeamspaceId === ts._id;
             return (
-              <div key={ts._id} className="card" style={{ padding: 20, border: isActive ? '2px solid var(--primary)' : '1px solid var(--border)', borderRadius: 12, position: 'relative', cursor: 'pointer', transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: isActive ? '0 0 0 3px rgba(108,92,231,0.15)' : 'none' }} onClick={() => setActiveTeamspaceId(ts._id)}>
+              <div key={ts._id} className="card" style={{ padding: 20, border: isActive ? '2px solid var(--primary)' : '1px solid var(--border)', borderRadius: 12, position: 'relative', cursor: 'pointer', transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: isActive ? '0 0 0 3px var(--primary-glow)' : 'none' }} onClick={() => setActiveTeamspaceId(ts._id)}>
                 {isActive && <div style={{ position: 'absolute', top: 10, right: 12, fontSize: '0.68rem', fontWeight: 700, color: 'var(--primary-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                   <span style={{ fontSize: '1.8rem' }}>{ts.icon || '🏢'}</span>
@@ -135,7 +135,7 @@ export default function TeamspaceControlPage() {
                 <label className="label">Icon</label>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {ICONS.map(ic => (
-                    <button key={ic} type="button" onClick={() => setIcon(ic)} style={{ width: 36, height: 36, borderRadius: 8, border: icon === ic ? '2px solid var(--primary)' : '1px solid var(--border)', background: icon === ic ? 'rgba(108,92,231,0.12)' : 'transparent', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <button key={ic} type="button" onClick={() => setIcon(ic)} style={{ width: 36, height: 36, borderRadius: 8, border: icon === ic ? '2px solid var(--primary)' : '1px solid var(--border)', background: icon === ic ? 'var(--primary-tint)' : 'transparent', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {ic}
                     </button>
                   ))}

@@ -32,7 +32,6 @@
 .pages-sidebar-header h3 {
   font-size: 0.85rem;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
 }
@@ -69,7 +68,7 @@
 }
 .page-list-item:hover { background: var(--bg-hover); color: var(--text); }
 .page-list-item.active {
-  background: rgba(108, 92, 231, 0.12);
+  background: rgba(35,131,226, 0.12);
   color: var(--primary-light);
   font-weight: 600;
 }

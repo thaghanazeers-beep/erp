@@ -6,10 +6,10 @@ import './PagesPage.css';
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
 const STATUS_COLOR = {
   'Not Yet Started': 'var(--text-muted)',
-  'In Progress':     'var(--accent-blue, #74b9ff)',
-  'In Review':       '#fdcb6e',
+  'In Progress':     'var(--accent-blue, #2383e2)',
+  'In Review':       '#d9730d',
   'Completed':       'var(--accent-green)',
-  'Rejected':        'var(--accent-red, #ff6b6b)',
+  'Rejected':        'var(--accent-red, #d44c47)',
 };
 
 export default function PagesPage() {

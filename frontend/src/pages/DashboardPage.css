@@ -38,7 +38,6 @@
   transition: transform var(--transition), box-shadow var(--transition);
 }
 .kpi-card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 .kpi-icon {
@@ -60,7 +59,6 @@
   font-size: 0.85rem;
   color: var(--text-muted);
   font-weight: 500;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
@@ -101,9 +99,9 @@
   display: flex;
   flex-direction: column;
 }
-.alert-card.danger { border-top: 4px solid #ff4d4d; }
-.alert-card.warning { border-top: 4px solid #ff9800; }
-.alert-card.info { border-top: 4px solid #74b9ff; }
+.alert-card.danger { border-top: 4px solid #d44c47; }
+.alert-card.warning { border-top: 4px solid #d9730d; }
+.alert-card.info { border-top: 4px solid #2383e2; }
 
 .alert-header {
   display: flex;
@@ -218,7 +216,7 @@
   box-shadow: var(--shadow-sm);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-.perf-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--border-light); }
+.perf-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-light); }
 
 .perf-card-header {
   display: flex;

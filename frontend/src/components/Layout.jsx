@@ -112,7 +112,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
         {/* Logo */}
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="2"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 15 L8 8 L12 13 L16 8 L21 13" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/><circle cx="21" cy="7.5" r="1.6" fill="currentColor"/></svg>
           </div>
           <span className="sidebar-title">Mayvel</span>
         </div>
@@ -279,7 +279,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
                     <input type="radio" name="tsType" value="org" checked={tsType === 'org'} onChange={e => setTsType(e.target.value)} style={{ display: 'none' }} />
                     <div className={`type-option ${tsType === 'org' ? 'active' : ''}`} style={{
                       padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'center',
-                      background: tsType === 'org' ? 'rgba(108, 92, 231, 0.1)' : 'transparent',
+                      background: tsType === 'org' ? 'var(--primary-tint)' : 'transparent',
                       borderColor: tsType === 'org' ? 'var(--primary)' : 'var(--border)'
                     }}>
                       <div style={{ fontSize: '1.2rem', marginBottom: 4 }}>🏢</div>
@@ -291,7 +291,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
                     <input type="radio" name="tsType" value="personal" checked={tsType === 'personal'} onChange={e => setTsType(e.target.value)} style={{ display: 'none' }} />
                     <div className={`type-option ${tsType === 'personal' ? 'active' : ''}`} style={{
                       padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'center',
-                      background: tsType === 'personal' ? 'rgba(0, 184, 148, 0.1)' : 'transparent',
+                      background: tsType === 'personal' ? 'rgba(46, 158, 107, 0.08)' : 'transparent',
                       borderColor: tsType === 'personal' ? 'var(--accent-green)' : 'var(--border)'
                     }}>
                       <div style={{ fontSize: '1.2rem', marginBottom: 4 }}>👤</div>

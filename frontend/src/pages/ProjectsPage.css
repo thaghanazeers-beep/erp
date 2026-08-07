@@ -19,7 +19,6 @@
 }
 .project-card:hover {
   border-color: var(--border-light);
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
 .project-card:hover .btn-icon { opacity: 1 !important; }
@@ -51,7 +50,7 @@
   transition: all var(--transition);
 }
 .picker-item:hover { border-color: var(--border-light); }
-.picker-item.active { border-color: var(--primary); background: rgba(108,92,231,0.1); }
+.picker-item.active { border-color: var(--primary); background: rgba(35,131,226,0.1); }
 
 .color-swatch {
   width: 32px; height: 32px;
@@ -60,7 +59,7 @@
   cursor: pointer;
   transition: all var(--transition);
 }
-.color-swatch:hover { transform: scale(1.15); }
+.color-swatch:hover { border-color: var(--border-light); }
 .color-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg); }
 
 .project-card-bottom {
@@ -73,7 +72,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--primary-light);
-  background: rgba(108, 92, 231, 0.1);
+  background: rgba(35,131,226, 0.1);
   padding: 2px 8px;
   border-radius: 12px;
 }
@@ -92,7 +91,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
 }
-.project-gallery-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: var(--border-light); }
+.project-gallery-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-light); }
 
 .project-gallery-cover {
   height: 120px;

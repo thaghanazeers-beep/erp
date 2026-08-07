@@ -7,23 +7,23 @@ import { MAYVEL_ORG_CHART, CHART_VERSION } from '../data/mayvelOrgChart';
 import './OrgChartPage.css';
 
 const ROLE_COLORS = {
-  'Founder':      { bg: '#1a1a2e', border: '#6c5ce7', text: '#fff' },
-  'CEO':          { bg: '#2d1f5e', border: '#6c5ce7', text: '#fff' },
-  'CTO':          { bg: '#1a3a4e', border: '#00cec9', text: '#fff' },
-  'COO':          { bg: '#1a3a2e', border: '#00b894', text: '#fff' },
-  'CFO':          { bg: '#3a2e1a', border: '#fdcb6e', text: '#fff' },
-  'Director':     { bg: '#1e2a3a', border: '#0984e3', text: '#fff' },
-  'Manager':      { bg: '#2e1a3a', border: '#a29bfe', text: '#fff' },
-  'Lead':         { bg: '#1a2e3a', border: '#74b9ff', text: '#fff' },
-  'Designer':     { bg: '#3a1a2e', border: '#fd79a8', text: '#fff' },
-  'Developer':    { bg: '#1a3a1a', border: '#55efc4', text: '#fff' },
-  'Consultant':   { bg: '#2a2a1a', border: '#ffeaa7', text: '#fff' },
-  'Intern':       { bg: '#1e1e2e', border: '#dfe6e9', text: '#ccc' },
-  'Marketing':    { bg: '#3a2a1a', border: '#e17055', text: '#fff' },
-  'Member':       { bg: '#1e1e2e', border: '#636e72', text: '#ccc' },
-  'Admin':        { bg: '#1e2e1e', border: '#00b894', text: '#fff' },
-  'Team Owner':   { bg: '#2d1f5e', border: '#6c5ce7', text: '#fff' },
-  'default':      { bg: '#1e1e2e', border: '#444', text: '#ccc' },
+  'Founder':      { bg: 'var(--bg-card)', border: '#8a63d2', text: 'var(--text)' },
+  'CEO':          { bg: 'var(--bg-card)', border: '#8a63d2', text: 'var(--text)' },
+  'CTO':          { bg: 'var(--bg-card)', border: '#0d9488', text: 'var(--text)' },
+  'COO':          { bg: 'var(--bg-card)', border: '#2e9e6b', text: 'var(--text)' },
+  'CFO':          { bg: 'var(--bg-card)', border: '#b7791f', text: 'var(--text)' },
+  'Director':     { bg: 'var(--bg-card)', border: '#2383e2', text: 'var(--text)' },
+  'Manager':      { bg: 'var(--bg-card)', border: '#8a63d2', text: 'var(--text)' },
+  'Lead':         { bg: 'var(--bg-card)', border: '#2383e2', text: 'var(--text)' },
+  'Designer':     { bg: 'var(--bg-card)', border: '#c14c8a', text: 'var(--text)' },
+  'Developer':    { bg: 'var(--bg-card)', border: '#2e9e6b', text: 'var(--text)' },
+  'Consultant':   { bg: 'var(--bg-card)', border: '#b7791f', text: 'var(--text)' },
+  'Intern':       { bg: 'var(--bg-card)', border: '#9b9a97', text: 'var(--text-secondary)' },
+  'Marketing':    { bg: 'var(--bg-card)', border: '#d9730d', text: 'var(--text)' },
+  'Member':       { bg: 'var(--bg-card)', border: '#9b9a97', text: 'var(--text-secondary)' },
+  'Admin':        { bg: 'var(--bg-card)', border: '#2e9e6b', text: 'var(--text)' },
+  'Team Owner':   { bg: 'var(--bg-card)', border: '#8a63d2', text: 'var(--text)' },
+  'default':      { bg: 'var(--bg-card)', border: '#9b9a97', text: 'var(--text-secondary)' },
 };
 
 const getNodeColor = (node) => {
@@ -373,8 +373,8 @@ export default function OrgChartPage() {
                 style={{
                   left: node.x, top: node.y, width: node.w, minHeight: node.h,
                   background: colors.bg,
-                  borderColor: isSel ? '#fff' : colors.border,
-                  boxShadow: isSel ? `0 0 0 2px ${colors.border}, 0 8px 32px rgba(0,0,0,0.5)` : `0 4px 16px rgba(0,0,0,0.3)`,
+                  borderColor: isSel ? colors.border : 'var(--border)',
+                  boxShadow: isSel ? `0 0 0 2px ${colors.border}40, var(--shadow-md)` : 'var(--shadow-sm)',
                 }}
                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                 onClick={(e) => { e.stopPropagation(); setSelected(node.id); }}

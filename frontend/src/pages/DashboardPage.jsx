@@ -9,7 +9,7 @@ import {
 import TaskDetailPage from './TaskDetailPage';
 import './DashboardPage.css';
 
-const COLORS = ['#00b894', '#74b9ff', '#6c5ce7', '#ff9800', '#ff4d4d'];
+const COLORS = ['#2e9e6b', '#2383e2', '#8a63d2', '#d9730d', '#d44c47'];
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -175,7 +175,7 @@ export default function DashboardPage() {
 
       <div className="kpi-grid">
         <div className="kpi-card">
-          <div className="kpi-icon" style={{background: 'rgba(116, 185, 255, 0.15)', color: '#74b9ff'}}>
+          <div className="kpi-icon" style={{background: 'rgba(35,131,226,0.1)', color: '#2383e2'}}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
           </div>
           <div className="kpi-info">
@@ -184,7 +184,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-icon" style={{background: 'rgba(108, 92, 231, 0.15)', color: '#6c5ce7'}}>
+          <div className="kpi-icon" style={{background: 'rgba(138,99,210,0.1)', color: '#8a63d2'}}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg>
           </div>
           <div className="kpi-info">
@@ -193,7 +193,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-icon" style={{background: 'rgba(0, 184, 148, 0.15)', color: '#00b894'}}>
+          <div className="kpi-icon" style={{background: 'rgba(46,158,107,0.1)', color: '#2e9e6b'}}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           </div>
           <div className="kpi-info">
@@ -202,7 +202,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-icon" style={{background: 'rgba(255, 77, 77, 0.15)', color: '#ff4d4d'}}>
+          <div className="kpi-icon" style={{background: 'rgba(212,76,71,0.1)', color: '#d44c47'}}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
           <div className="kpi-info">
@@ -211,7 +211,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-icon" style={{background: 'rgba(255, 152, 0, 0.15)', color: '#ff9800'}}>
+          <div className="kpi-icon" style={{background: 'rgba(217,115,13,0.1)', color: '#d9730d'}}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
           <div className="kpi-info">
@@ -237,22 +237,22 @@ export default function DashboardPage() {
                   <h4>{perf.name}</h4>
                   <span>{perf.completed} / {perf.total} Tasks Done</span>
                 </div>
-                <div className="perf-score" style={{ color: perf.score > 80 ? '#00b894' : perf.score > 50 ? '#ff9800' : '#ff4d4d' }}>
+                <div className="perf-score" style={{ color: perf.score > 80 ? '#2e9e6b' : perf.score > 50 ? '#d9730d' : '#d44c47' }}>
                   {perf.score}
                 </div>
               </div>
               <div className="perf-metrics">
                 <div className="perf-metric">
                   <div className="perf-metric-label"><span>Efficiency</span><span>{perf.efficiency}%</span></div>
-                  <div className="perf-progress"><div className="perf-progress-fill" style={{ width: `${Math.min(perf.efficiency, 100)}%`, background: '#74b9ff' }} /></div>
+                  <div className="perf-progress"><div className="perf-progress-fill" style={{ width: `${Math.min(perf.efficiency, 100)}%`, background: '#2383e2' }} /></div>
                 </div>
                 <div className="perf-metric">
                   <div className="perf-metric-label"><span>On-Time</span><span>{perf.onTimeRate}%</span></div>
-                  <div className="perf-progress"><div className="perf-progress-fill" style={{ width: `${perf.onTimeRate}%`, background: '#00b894' }} /></div>
+                  <div className="perf-progress"><div className="perf-progress-fill" style={{ width: `${perf.onTimeRate}%`, background: '#2e9e6b' }} /></div>
                 </div>
                 <div className="perf-metric">
                   <div className="perf-metric-label"><span>Completion</span><span>{perf.completionRate}%</span></div>
-                  <div className="perf-progress"><div className="perf-progress-fill" style={{ width: `${perf.completionRate}%`, background: '#6c5ce7' }} /></div>
+                  <div className="perf-progress"><div className="perf-progress-fill" style={{ width: `${perf.completionRate}%`, background: '#8a63d2' }} /></div>
                 </div>
               </div>
             </div>
@@ -287,8 +287,8 @@ export default function DashboardPage() {
                 <YAxis stroke="var(--text-muted)" fontSize={12} />
                 <RechartsTooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)' }} />
                 <Legend wrapperStyle={{ fontSize: 12, paddingTop: 10 }} />
-                <Line type="monotone" dataKey="Total" stroke="#74b9ff" strokeWidth={3} />
-                <Line type="monotone" dataKey="Completed" stroke="#00b894" strokeWidth={3} />
+                <Line type="monotone" dataKey="Total" stroke="#2383e2" strokeWidth={3} />
+                <Line type="monotone" dataKey="Completed" stroke="#2e9e6b" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -352,7 +352,7 @@ export default function DashboardPage() {
             {overbudgetTasks.slice(0,5).map(t => (
               <div key={t._id} className="alert-item clickable-row" onClick={() => setSelectedTask(t)}>
                 <span className="alert-title">{t.title}</span>
-                <span className="alert-meta" style={{color: '#ff9800', fontWeight: 600}}>{t.actualHours}h / {t.estimatedHours}h est.</span>
+                <span className="alert-meta" style={{color: '#d9730d', fontWeight: 600}}>{t.actualHours}h / {t.estimatedHours}h est.</span>
               </div>
             ))}
             {overbudgetTasks.length === 0 && <p className="alert-empty">All tasks within estimated limits.</p>}

@@ -50,7 +50,7 @@ export default function TasksPage() {
   const [selectedTasksIds, setSelectedTasksIds] = useState([]);
 
   const PRIORITIES = ['Urgent', 'High', 'Medium', 'Low'];
-  const PRIORITY_COLOR = { Urgent: '#ff4d4d', High: '#ff9800', Medium: '#6c5ce7', Low: '#00b894' };
+  const PRIORITY_COLOR = { Urgent: '#d44c47', High: '#d9730d', Medium: '#2383e2', Low: '#2e9e6b' };
 
   // Filters
   const [openFilter, setOpenFilter] = useState(null); // which filter dropdown is open
