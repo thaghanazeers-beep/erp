@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { updateTask, getTeam, createTask, deleteTask, getTasks, getProjects, getSprints, uploadTaskAttachments, downloadAttachmentBlob } from '../api';
 import { useAuth } from '../context/AuthContext';
 import FileTypeIcon from '../components/FileTypeIcon';
+import FilePreviewModal from '../components/FilePreviewModal';
 import './TaskDetailPage.css';
 
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
@@ -21,6 +22,7 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
   const [assignee, setAssignee] = useState(task?.assignee || '');
   const [dueDate, setDueDate] = useState(task?.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '');
   const [attachments, setAttachments] = useState(task?.attachments || []);
+  const [previewAtt, setPreviewAtt] = useState(null);
   const [projectId, setProjectId] = useState(task?.projectId || '');
   const [estimatedHours, setEstimatedHours] = useState(task?.estimatedHours || 0);
   const [actualHours, setActualHours] = useState(task?.actualHours || 0);
@@ -283,13 +285,16 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
                   <div className="td-attachment-icon"><FileTypeIcon name={att.name} /></div>
                   <div className="td-attachment-info">
                     {att.path && !att.path.startsWith('blob:') ? (
-                      <span className="td-attachment-name" onClick={() => openAttachment(att)} style={{ cursor: 'pointer', textDecoration: 'underline' }} title="Download">{att.name}</span>
+                      <span className="td-attachment-name" onClick={() => setPreviewAtt(att)} style={{ cursor: 'pointer' }} title="Preview">{att.name}</span>
                     ) : (
                       <span className="td-attachment-name" title="File was added before uploads were supported — re-attach it">{att.name} (unavailable)</span>
                     )}
                     <span className="td-attachment-size">{formatSize(att.sizeBytes)}</span>
                   </div>
-                  <button className="btn-icon" onClick={() => removeAttachment(att.id)} style={{ width: 28, height: 28 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                  {att.path && !att.path.startsWith('blob:') && (
+                    <button className="btn-icon" onClick={() => openAttachment(att)} title="Download" style={{ width: 28, height: 28 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                  )}
+                  <button className="btn-icon" onClick={() => removeAttachment(att.id)} title="Remove" style={{ width: 28, height: 28 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </div>
               ))}</div>
             ) : <p className="td-empty-hint">No attachments.</p>}
@@ -394,6 +399,14 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
           )}
         </div>
       </div>
+
+      {previewAtt && (
+        <FilePreviewModal
+          attachment={previewAtt}
+          onClose={() => setPreviewAtt(null)}
+          onDownload={() => openAttachment(previewAtt)}
+        />
+      )}
     </div>
   );
 }

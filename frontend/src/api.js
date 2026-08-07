@@ -42,6 +42,8 @@ export const uploadTaskAttachments = (taskId, files) => {
 // the session token), then hand the blob to the browser to save.
 export const downloadAttachmentBlob = (key) =>
   API.get(`/files/attachments/${key}`, { responseType: 'blob' });
+// Signed, expiring public link for in-app previews / the Office viewer
+export const getAttachmentSignedUrl = (key) => API.get(`/files/attachments/${key}/signed-url`);
 
 // Team
 export const getTeam = () => API.get('/team');

@@ -136,6 +136,50 @@ app.get('/files/avatars/:key', async (req, res) => {
   }
 });
 
+// Attachment preview streaming via signed, expiring links — <img>/<video>/
+// <iframe> tags and the Microsoft Office viewer can't send auth headers.
+// Links are minted by GET /api/files/attachments/:key/signed-url (auth'd).
+const signPreviewToken = (key, exp) =>
+  crypto.createHmac('sha256', process.env.JWT_SECRET).update(`att-preview:${key}:${exp}`).digest('hex');
+
+app.get('/files/att-preview/:key', async (req, res) => {
+  try {
+    if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) return res.status(400).end();
+    const { exp, sig } = req.query;
+    if (!exp || !sig || !/^\d+$/.test(exp) || Number(exp) < Math.floor(Date.now() / 1000)) {
+      return res.status(403).end();
+    }
+    const expected = signPreviewToken(req.params.key, exp);
+    const sigBuf = Buffer.from(String(sig));
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return res.status(403).end();
+    }
+    const f = await fileStore.getFile(`attachments/${req.params.key}`);
+    if (!f) return res.status(404).end();
+    const PREVIEW_MIME = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+      '.webp': 'image/webp', '.svg': 'image/svg+xml', '.pdf': 'application/pdf',
+      '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+      '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.doc': 'application/msword',
+      '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      '.ppt': 'application/vnd.ms-powerpoint',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.xls': 'application/vnd.ms-excel',
+    };
+    const mime = f.contentType || PREVIEW_MIME[path.extname(req.params.key)] || 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    if (f.contentLength) res.setHeader('Content-Length', f.contentLength);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    f.body.pipe(res);
+  } catch {
+    res.status(500).end();
+  }
+});
+
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
@@ -776,6 +820,23 @@ app.post('/api/tasks/:id/attachments', attachmentUpload.array('attachments', 10)
 });
 
 // Authenticated attachment download — streams from the file store.
+// Mint a signed, expiring preview link for an attachment (1 hour). Used by
+// the in-app preview modal and passed to the Microsoft Office viewer for
+// doc/ppt/xls rendering.
+app.get('/api/files/attachments/:key/signed-url', async (req, res) => {
+  try {
+    if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) {
+      return res.status(400).json({ message: 'Bad key' });
+    }
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const sig = signPreviewToken(req.params.key, exp);
+    const base = process.env.SERVER_URL || `${req.protocol}://${req.get('host')}`;
+    res.json({ url: `${base}/files/att-preview/${req.params.key}?exp=${exp}&sig=${sig}`, expiresAt: exp });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/files/attachments/:key', async (req, res) => {
   try {
     if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) return res.status(400).end();
