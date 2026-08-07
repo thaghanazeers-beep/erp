@@ -11,6 +11,7 @@ const sprintSchema = new mongoose.Schema({
   createdDate: { type: Date, default: Date.now },
   completedAt: { type: Date },
   teamspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teamspace' },
+  notionId:    { type: String, index: true }, // Notion sprint page id (set by syncNotionSprints)
 });
 
 module.exports = mongoose.model('Sprint', sprintSchema);
