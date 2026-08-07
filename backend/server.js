@@ -364,6 +364,120 @@ app.post('/api/team/invite', requireAdmin, async (req, res) => {
   }
 });
 
+// ==================== MERGE DUPLICATE USERS ====================
+// Duplicates happen two ways: a second User account for the same person
+// (e.g. a pre-SSO invite plus the real SSO login), or an orphan assignee
+// name string on tasks (e.g. Notion-imported "Thahanazeer") that matches
+// no account. Both merge into one target account.
+
+// Candidates for the admin merge dialog: every account (active or not)
+// plus every distinct task-assignee name, with task counts and whether
+// the name resolves to an account.
+app.get('/api/team/merge-candidates', requireAdmin, async (req, res) => {
+  try {
+    const [users, assigneeCounts] = await Promise.all([
+      User.find({}, 'name email role active profilePictureUrl').sort({ name: 1 }),
+      Task.aggregate([
+        { $match: { assignee: { $nin: ['', null] } } },
+        { $group: { _id: '$assignee', taskCount: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+    const userNames = new Set(users.map(u => u.name));
+    const counts = Object.fromEntries(assigneeCounts.map(a => [a._id, a.taskCount]));
+    const orphans = assigneeCounts
+      .filter(a => !userNames.has(a._id))
+      .map(a => ({ name: a._id, taskCount: a.taskCount }));
+    res.json({
+      users: users.map(u => ({ ...u.toObject(), taskCount: counts[u.name] || 0 })),
+      orphans,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Merge `source` (a duplicate account OR a bare assignee name) into the
+// `target` account: every reference moves to the target's name/id, then a
+// duplicate account is deleted.
+app.post('/api/team/merge', requireAdmin, async (req, res) => {
+  try {
+    const { sourceUserId, sourceName: rawSourceName, targetUserId } = req.body;
+
+    const target = await User.findById(targetUserId);
+    if (!target) return res.status(404).json({ message: 'Target user not found' });
+
+    let source = null;
+    let sourceName = String(rawSourceName || '').trim();
+    if (sourceUserId) {
+      if (sourceUserId === targetUserId) {
+        return res.status(400).json({ message: 'Source and target are the same user' });
+      }
+      source = await User.findById(sourceUserId);
+      if (!source) return res.status(404).json({ message: 'Source user not found' });
+      sourceName = source.name;
+    }
+    if (!sourceName) return res.status(400).json({ message: 'A source user or name is required' });
+    if (sourceName === target.name) {
+      return res.status(400).json({ message: 'Source name already matches the target user' });
+    }
+
+    const stats = {};
+
+    // Name-string references
+    stats.tasksReassigned = (await Task.updateMany({ assignee: sourceName }, { assignee: target.name })).modifiedCount;
+    stats.tasksUpdatedBy = (await Task.updateMany({ updatedBy: sourceName }, { updatedBy: target.name })).modifiedCount;
+    stats.notifications = (await Notification.updateMany({ userId: sourceName }, { userId: target.name })).modifiedCount
+      + (await Notification.updateMany({ actorName: sourceName }, { actorName: target.name })).modifiedCount;
+    stats.projects = (await Project.updateMany({ createdBy: sourceName }, { createdBy: target.name })).modifiedCount;
+    stats.sprints = (await Sprint.updateMany({ createdBy: sourceName }, { createdBy: target.name })).modifiedCount;
+    stats.pages = (await Page.updateMany({ createdBy: sourceName }, { createdBy: target.name })).modifiedCount;
+    stats.workflows = (await Workflow.updateMany({ createdBy: sourceName }, { createdBy: target.name })).modifiedCount;
+
+    // Org chart nodes match by name or by linked member id
+    const orgFilter = source
+      ? { $or: [{ 'n.name': sourceName }, { 'n.memberId': source._id.toString() }] }
+      : { 'n.name': sourceName };
+    stats.orgChartNodes = (await OrgChart.updateMany(
+      {},
+      { $set: { 'nodes.$[n].name': target.name, 'nodes.$[n].memberId': target._id.toString() } },
+      { arrayFilters: [orgFilter] }
+    )).modifiedCount;
+
+    // Account-level references, then remove the duplicate account
+    if (source) {
+      const spaces = await Teamspace.find({
+        $or: [{ 'members.userId': source._id }, { ownerId: source._id }],
+      });
+      for (const ts of spaces) {
+        if (ts.ownerId && ts.ownerId.equals(source._id)) ts.ownerId = target._id;
+        const targetIsMember = ts.members.some(m => m.userId && m.userId.equals(target._id));
+        if (targetIsMember) {
+          ts.members = ts.members.filter(m => !(m.userId && m.userId.equals(source._id)));
+        } else {
+          const entry = ts.members.find(m => m.userId && m.userId.equals(source._id));
+          if (entry) entry.userId = target._id;
+        }
+        await ts.save();
+      }
+      stats.teamspaces = spaces.length;
+
+      // Fill profile gaps on the surviving account
+      const fills = {};
+      if (!target.profilePictureUrl && source.profilePictureUrl) fills.profilePictureUrl = source.profilePictureUrl;
+      if (!target.azureOid && source.azureOid) fills.azureOid = source.azureOid;
+      if (Object.keys(fills).length) await User.updateOne({ _id: target._id }, fills);
+
+      await User.deleteOne({ _id: source._id });
+      stats.accountDeleted = true;
+    }
+
+    res.json({ merged: true, source: sourceName, target: target.name, stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== PROFILE PICTURE UPLOAD ====================
 app.post('/api/users/:id/avatar', avatarUpload.single('avatar'), async (req, res) => {
   try {

@@ -47,6 +47,8 @@ export const downloadAttachmentBlob = (key) =>
 export const getTeam = () => API.get('/team');
 export const removeUser = (id) => API.delete(`/team/${id}`);
 export const inviteUser = (email, role, inviterName) => API.post('/team/invite', { email, role, inviterName });
+export const getMergeCandidates = () => API.get('/team/merge-candidates');
+export const mergeUsers = (payload) => API.post('/team/merge', payload);
 
 // Projects
 export const getProjects = (tsId) => API.get('/projects' + (tsId ? `?teamspaceId=${tsId}` : ''));

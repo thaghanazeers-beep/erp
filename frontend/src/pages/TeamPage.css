@@ -154,6 +154,32 @@
 }
 .edit-form-row .form-field { flex: 1; }
 
+/* Merge preview */
+.merge-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.merge-preview-name {
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.merge-preview-target { color: var(--text); font-weight: 600; }
+.merge-preview-count {
+  width: 100%;
+  font-size: 0.75rem;
+}
+
 /* Invite result styles */
 .invite-result {
   padding: 14px 16px;

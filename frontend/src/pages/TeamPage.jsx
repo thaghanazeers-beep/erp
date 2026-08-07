@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getTeam, inviteUser, removeUser, updateUser, uploadAvatar } from '../api';
+import { getTeam, inviteUser, removeUser, updateUser, uploadAvatar, getMergeCandidates, mergeUsers } from '../api';
 import { useAuth } from '../context/AuthContext';
 import ViewTabs from '../components/ViewTabs';
 import './TeamPage.css';
@@ -9,6 +9,7 @@ const ROLES = ['Member', 'Admin', 'Team Owner'];
 export default function TeamPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin' || user?.role === 'Team Owner';
+  const canMerge = user?.role === 'Admin';
 
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +42,14 @@ export default function TeamPage() {
   const [role, setRole] = useState('Member');
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState(null);
+
+  // Merge modal
+  const [showMerge, setShowMerge] = useState(false);
+  const [mergeCandidates, setMergeCandidates] = useState(null); // { users, orphans }
+  const [mergeSource, setMergeSource] = useState(''); // "user:<id>" or "name:<assignee>"
+  const [mergeTarget, setMergeTarget] = useState(''); // user id
+  const [merging, setMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState(null);
 
   // Edit modal
   const [editMember, setEditMember] = useState(null); // member object being edited
@@ -93,6 +102,63 @@ export default function TeamPage() {
       fetchTeam();
     } catch (err) {
       console.error('Failed to remove:', err);
+    }
+  };
+
+  // ── Merge Users ─────────────────────────────────────────
+  const openMerge = async () => {
+    setShowMerge(true);
+    setMergeSource('');
+    setMergeTarget('');
+    setMergeResult(null);
+    try {
+      const res = await getMergeCandidates();
+      setMergeCandidates(res.data);
+    } catch (err) {
+      setMergeResult({ success: false, message: err.response?.data?.message || 'Failed to load users' });
+    }
+  };
+
+  const selectedSource = (() => {
+    if (!mergeSource || !mergeCandidates) return null;
+    if (mergeSource.startsWith('user:')) {
+      const u = mergeCandidates.users.find(x => x._id === mergeSource.slice(5));
+      return u ? { kind: 'user', label: `${u.name} (${u.email})`, name: u.name, taskCount: u.taskCount, id: u._id } : null;
+    }
+    const name = mergeSource.slice(5);
+    const o = mergeCandidates.orphans.find(x => x.name === name);
+    return o ? { kind: 'name', label: o.name, name: o.name, taskCount: o.taskCount } : null;
+  })();
+  const selectedTarget = mergeCandidates?.users.find(u => u._id === mergeTarget) || null;
+
+  const handleMerge = async (e) => {
+    e.preventDefault();
+    if (!selectedSource || !selectedTarget) return;
+    const summary = selectedSource.kind === 'user'
+      ? `Merge "${selectedSource.label}" into "${selectedTarget.name} (${selectedTarget.email})"?\n\nAll their tasks, notifications, teamspace memberships and org chart entries move to ${selectedTarget.name}, and the duplicate account is permanently deleted. This cannot be undone.`
+      : `Reassign everything under the name "${selectedSource.name}" to "${selectedTarget.name} (${selectedTarget.email})"?\n\nThis cannot be undone.`;
+    if (!confirm(summary)) return;
+    setMerging(true);
+    setMergeResult(null);
+    try {
+      const payload = selectedSource.kind === 'user'
+        ? { sourceUserId: selectedSource.id, targetUserId: mergeTarget }
+        : { sourceName: selectedSource.name, targetUserId: mergeTarget };
+      const res = await mergeUsers(payload);
+      const s = res.data.stats || {};
+      setMergeResult({
+        success: true,
+        message: `Merged "${res.data.source}" into "${res.data.target}" — ${s.tasksReassigned || 0} tasks reassigned${s.accountDeleted ? ', duplicate account removed' : ''}.`,
+      });
+      setMergeSource('');
+      setMergeTarget('');
+      fetchTeam();
+      const cand = await getMergeCandidates();
+      setMergeCandidates(cand.data);
+    } catch (err) {
+      setMergeResult({ success: false, message: err.response?.data?.message || err.response?.data?.error || 'Merge failed' });
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -159,12 +225,20 @@ export default function TeamPage() {
 
       <div className="team-toolbar" style={{ paddingTop: 0 }}>
         <span className="tasks-count">{members.length} members</span>
-        {isAdmin && (
-          <button className="btn btn-primary btn-sm" onClick={() => { setShowInvite(true); setInviteResult(null); }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Invite User
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {canMerge && (
+            <button className="btn btn-ghost btn-sm" onClick={openMerge}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 009 9"/></svg>
+              Merge Users
+            </button>
+          )}
+          {isAdmin && (
+            <button className="btn btn-primary btn-sm" onClick={() => { setShowInvite(true); setInviteResult(null); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Invite User
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid (Cards) View */}
@@ -261,6 +335,86 @@ export default function TeamPage() {
           </table>
         </div>
       )}
+      {/* ─── Merge Users Modal ─── */}
+      {showMerge && (
+        <div className="modal-overlay" onClick={() => setShowMerge(false)}>
+          <div className="modal animate-in" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Merge Users</h2>
+              <button className="btn-icon" onClick={() => setShowMerge(false)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleMerge} className="modal-form">
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Combine a duplicate account or a stray assignee name into one user.
+                Tasks, notifications, teamspaces and org chart entries all move to the user you keep.
+              </p>
+
+              <div className="form-field">
+                <label className="label">Duplicate to merge (source)</label>
+                <select className="input" value={mergeSource} onChange={(e) => setMergeSource(e.target.value)} required disabled={!mergeCandidates}>
+                  <option value="">{mergeCandidates ? 'Select duplicate…' : 'Loading…'}</option>
+                  {mergeCandidates?.users.length > 0 && (
+                    <optgroup label="Accounts">
+                      {mergeCandidates.users.map(u => (
+                        <option key={u._id} value={`user:${u._id}`} disabled={u._id === user?.id}>
+                          {u.name} ({u.email}){u.active === false ? ' — deactivated' : ''} · {u.taskCount} tasks
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {mergeCandidates?.orphans.length > 0 && (
+                    <optgroup label="Assignee names without an account">
+                      {mergeCandidates.orphans.map(o => (
+                        <option key={o.name} value={`name:${o.name}`}>
+                          {o.name} · {o.taskCount} tasks
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              <div className="form-field">
+                <label className="label">Merge into (kept)</label>
+                <select className="input" value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)} required disabled={!mergeCandidates}>
+                  <option value="">Select user to keep…</option>
+                  {mergeCandidates?.users
+                    .filter(u => u.active !== false && `user:${u._id}` !== mergeSource)
+                    .map(u => (
+                      <option key={u._id} value={u._id}>{u.name} ({u.email})</option>
+                    ))}
+                </select>
+              </div>
+
+              {selectedSource && selectedTarget && (
+                <div className="merge-preview">
+                  <span className="merge-preview-name">{selectedSource.label}</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  <span className="merge-preview-name merge-preview-target">{selectedTarget.name}</span>
+                  <span className="merge-preview-count">{selectedSource.taskCount} tasks move{selectedSource.kind === 'user' ? ', duplicate account deleted' : ''}</span>
+                </div>
+              )}
+
+              {mergeResult && (
+                <div className={`invite-result ${mergeResult.success ? 'invite-success' : 'invite-error'}`}>
+                  <p>{mergeResult.message}</p>
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <div style={{ flex: 1 }} />
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowMerge(false)}>Close</button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={merging || !selectedSource || !selectedTarget}>
+                  {merging ? <span className="spinner" style={{ width: 14, height: 14 }} /> : 'Merge'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ─── Edit Member Modal ─── */}
       {editMember && (
         <div className="modal-overlay" onClick={() => setEditMember(null)}>
