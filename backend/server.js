@@ -218,8 +218,30 @@ async function createNotification({ type, title, message, taskId, taskTitle, use
 }
 
 // ==================== HEALTH (public) ====================
-app.get('/healthz', (req, res) => {
-  res.json({ ok: true, db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
+app.get('/healthz', async (req, res) => {
+  const out = {
+    ok: true,
+    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    storage: fileStore.describeBackend(),
+  };
+  // ?probe=storage does a tiny write/read roundtrip against the active file
+  // backend (fixed key, overwrites itself) so a misconfigured backend shows
+  // up here instead of as failing attachment downloads.
+  if (req.query.probe === 'storage') {
+    try {
+      const stamp = String(Date.now());
+      await fileStore.putFile('diagnostics/healthcheck.txt', Buffer.from(stamp), 'text/plain');
+      const f = await fileStore.getFile('diagnostics/healthcheck.txt');
+      if (!f) throw new Error('wrote file but read returned null');
+      const chunks = [];
+      for await (const c of f.body) chunks.push(c);
+      const echoed = Buffer.concat(chunks).toString();
+      out.storageProbe = echoed === stamp ? 'ok' : `mismatch (wrote ${stamp}, read ${echoed.slice(0, 32)})`;
+    } catch (err) {
+      out.storageProbe = `failed: ${err.message}`;
+    }
+  }
+  res.json(out);
 });
 
 // ==================== AUTH: MICROSOFT SSO ONLY ====================
