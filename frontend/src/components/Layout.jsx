@@ -97,7 +97,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
 
   const PERSONAL_TS_ID = '__personal__';
   const isPersonalActive = activeTeamspaceId === '' || activeTeamspaceId === PERSONAL_TS_ID;
-  const personalExpanded = expandedTs[PERSONAL_TS_ID] !== false; // default open
+  const personalExpanded = expandedTs[PERSONAL_TS_ID] === true; // default collapsed
   const isPersonalChildActive = (page) => isPersonalActive && activePage === page;
 
   const pageTitles = {
@@ -132,32 +132,6 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
             <button className="sidebar-section-btn" onClick={() => setShowTsModal(true)} title="New Teamspace">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
-          </div>
-
-          {/* ─── Personal Teamspace (always first, no org chart) ─── */}
-          <div className="ts-tree-group">
-            <div className={`ts-tree-header ${isPersonalActive ? 'ts-active' : ''}`}>
-              <button className="ts-tree-chevron" onClick={() => setExpandedTs(prev => ({ ...prev, [PERSONAL_TS_ID]: !personalExpanded }))}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: personalExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}><polyline points="9,6 15,12 9,18"/></svg>
-              </button>
-              <button className="ts-tree-name" onClick={() => { setActiveTeamspaceId(''); setExpandedTs(prev => ({ ...prev, [PERSONAL_TS_ID]: true })); }}>
-                <span className="ts-tree-icon">🏠</span>
-                <span className="ts-tree-label">Personal</span>
-              </button>
-            </div>
-            {personalExpanded && (
-              <div className="ts-tree-children">
-                {personalChildItems.map(item => (
-                  <button
-                    key={item.id}
-                    className={`sidebar-link sidebar-link-child ${isPersonalChildActive(item.id) ? 'active' : ''}`}
-                    onClick={() => { setActiveTeamspaceId(''); onNavigate(item.id); }}
-                  >
-                    {item.icon}<span>{item.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* ─── User-created Teamspaces ─── */}
@@ -212,6 +186,32 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
               </div>
             );
           })}
+
+          {/* ─── Personal Teamspace (last, collapsed by default, no org chart) ─── */}
+          <div className="ts-tree-group">
+            <div className={`ts-tree-header ${isPersonalActive ? 'ts-active' : ''}`}>
+              <button className="ts-tree-chevron" onClick={() => setExpandedTs(prev => ({ ...prev, [PERSONAL_TS_ID]: !personalExpanded }))}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: personalExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}><polyline points="9,6 15,12 9,18"/></svg>
+              </button>
+              <button className="ts-tree-name" onClick={() => { setActiveTeamspaceId(''); setExpandedTs(prev => ({ ...prev, [PERSONAL_TS_ID]: true })); }}>
+                <span className="ts-tree-icon">🏠</span>
+                <span className="ts-tree-label">Personal</span>
+              </button>
+            </div>
+            {personalExpanded && (
+              <div className="ts-tree-children">
+                {personalChildItems.map(item => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-link sidebar-link-child ${isPersonalChildActive(item.id) ? 'active' : ''}`}
+                    onClick={() => { setActiveTeamspaceId(''); onNavigate(item.id); }}
+                  >
+                    {item.icon}<span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* ═══ Company ═══ */}
           <div className="sidebar-section-row" style={{ marginTop: 12 }}>
