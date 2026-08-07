@@ -91,6 +91,9 @@ export default function TaskTable({
   onPrefsChange, // ({ sorts? | groupBy? | hiddenColumns? | columnOrder? | columnWidths? | calcs? })
   // Custom database properties (Notion-style)
   customProps = [], onCreateProperty, onDeleteProperty,
+  // Inline row creation + selection
+  onCreateTask,                     // async ({ title, ...groupPreset })
+  selectedIds = [], onToggleSelect, onToggleSelectAll,
 }) {
   // Collapsed groups are personal (not part of the shared view)
   const [collapsed, setCollapsed] = useState({});
@@ -102,8 +105,30 @@ export default function TaskTable({
   const [dragKey, setDragKey] = useState(null);   // column being dragged
   const [overKey, setOverKey] = useState(null);   // drop target column
   const [localWidths, setLocalWidths] = useState({}); // live widths while resizing
+  const [newRowGroup, setNewRowGroup] = useState(null); // group name (or '__ALL__') with an open "+ New" input
   const rootRef = useRef(null);
   const resizeRef = useRef(null);
+
+  // Values a new row inherits from its group section (Notion behavior)
+  const groupPreset = (group) => {
+    if (!groupBy || group.name === null || !group.rows.length) return {};
+    const t = group.rows[0];
+    switch (groupBy) {
+      case 'assignee': return { assignee: t.assignee || '' };
+      case 'status': return { status: t.status };
+      case 'project': return { projectId: t.projectId || null };
+      case 'priority': return { priority: t.priority || '' };
+      case 'sprint': return { sprintId: t.sprintId || null };
+      default: return {};
+    }
+  };
+
+  const commitNewRow = async (e, group) => {
+    const title = e.target.value.trim();
+    setNewRowGroup(null);
+    if (!title || !onCreateTask) return;
+    await onCreateTask({ title, ...groupPreset(group) });
+  };
 
   const setSorts = (updater) =>
     onPrefsChange({ sorts: typeof updater === 'function' ? updater(sorts) : updater });
@@ -409,11 +434,40 @@ export default function TaskTable({
     if (col.cp) return renderCpCell(task, col.cp, editable);
     switch (col.key) {
       case 'title':
-        return <span className="tt-title" onClick={() => onOpen(task)}>{task.title}</span>;
+        return (
+          <span className="tt-title-cell">
+            <input
+              className="tt-title-input"
+              key={`${task.id}_${task.title}`}
+              defaultValue={task.title}
+              disabled={!editable}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== task.title) onInlineUpdate(task.id, { title: v }); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { e.target.value = task.title; e.target.blur(); } }}
+            />
+            <button className="tt-open-btn" onClick={() => onOpen(task)} title="Open task">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+              Open
+            </button>
+          </span>
+        );
       case 'project':
-        return <span className="tt-muted">{projectName(task.projectId) || '—'}</span>;
+        return editable ? (
+          <select className="tt-select" value={task.projectId || ''} onChange={(e) => onInlineUpdate(task.id, { projectId: e.target.value || null })}>
+            <option value="">—</option>
+            {projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+          </select>
+        ) : (
+          <span className="tt-muted">{projectName(task.projectId) || '—'}</span>
+        );
       case 'sprint':
-        return <span className="tt-muted">{sprintName(task.sprintId) || '—'}</span>;
+        return editable ? (
+          <select className="tt-select" value={task.sprintId || ''} onChange={(e) => onInlineUpdate(task.id, { sprintId: e.target.value || null })}>
+            <option value="">—</option>
+            {sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+          </select>
+        ) : (
+          <span className="tt-muted">{sprintName(task.sprintId) || '—'}</span>
+        );
       case 'priority':
         return editable ? (
           <select
@@ -446,13 +500,34 @@ export default function TaskTable({
           <span className="tt-muted">{task.assignee || '—'}</span>
         );
       case 'dueDate':
-        return <span className="tt-muted">{formatDate(task.dueDate) || '—'}</span>;
+        return editable ? (
+          <input
+            type="date"
+            className="tt-cell-input"
+            value={task.dueDate ? String(task.dueDate).slice(0, 10) : ''}
+            onChange={(e) => onInlineUpdate(task.id, { dueDate: e.target.value || null })}
+          />
+        ) : (
+          <span className="tt-muted">{formatDate(task.dueDate) || '—'}</span>
+        );
       case 'createdDate':
         return <span className="tt-muted">{formatDate(task.createdDate) || '—'}</span>;
       case 'estimatedHours':
-        return <span className="tt-muted">{task.estimatedHours || 0}h</span>;
       case 'actualHours':
-        return <span className="tt-muted">{task.actualHours || 0}h</span>;
+        return editable ? (
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            className="tt-cell-input tt-hours-input"
+            key={`${task.id}_${col.key}_${task[col.key] ?? 0}`}
+            defaultValue={task[col.key] || 0}
+            onBlur={(e) => { const v = Number(e.target.value) || 0; if (v !== (task[col.key] || 0)) onInlineUpdate(task.id, { [col.key]: v }); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          />
+        ) : (
+          <span className="tt-muted">{task[col.key] || 0}h</span>
+        );
       default:
         return null;
     }
@@ -538,6 +613,16 @@ export default function TaskTable({
         <table className="task-table tt-table">
           <thead>
             <tr>
+              {onToggleSelect && (
+                <th className="tt-check-col">
+                  <input
+                    type="checkbox"
+                    className="tt-row-check"
+                    checked={tasks.length > 0 && selectedIds.length === tasks.length}
+                    onChange={(e) => onToggleSelectAll?.(e.target.checked)}
+                  />
+                </th>
+              )}
               {visibleCols.map(col => {
                 const sortRule = sorts.find(s => s.key === col.key);
                 const w = widths[col.key];
@@ -620,7 +705,7 @@ export default function TaskTable({
             <tbody key={group.name ?? '__all__'}>
               {group.name !== null && (
                 <tr className="tt-group-row" onClick={() => toggleGroup(group.name)}>
-                  <td colSpan={visibleCols.length + 1}>
+                  <td colSpan={visibleCols.length + 1 + (onToggleSelect ? 1 : 0)}>
                     <span className="tt-group-head">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: collapsed[group.name] ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }}><polyline points="9 6 15 12 9 18"/></svg>
                       {groupBy === 'assignee' && group.name !== 'No assignee' && (
@@ -633,7 +718,17 @@ export default function TaskTable({
                 </tr>
               )}
               {!collapsed[group.name] && group.rows.map(task => (
-                <tr key={task.id}>
+                <tr key={task.id} className={selectedIds.includes(task.id) ? 'tt-row-selected' : ''}>
+                  {onToggleSelect && (
+                    <td className="tt-check-col">
+                      <input
+                        type="checkbox"
+                        className="tt-row-check"
+                        checked={selectedIds.includes(task.id)}
+                        onChange={(e) => onToggleSelect(task.id, e.target.checked)}
+                      />
+                    </td>
+                  )}
                   {visibleCols.map(col => <td key={col.key}>{renderCell(task, col)}</td>)}
                   <td className="tt-row-actions">
                     {canEditTask(task) && (
@@ -644,6 +739,30 @@ export default function TaskTable({
                   </td>
                 </tr>
               ))}
+              {/* + New task (inherits the group's value, Notion-style) */}
+              {onCreateTask && !collapsed[group.name] && (
+                <tr className="tt-newrow">
+                  <td colSpan={visibleCols.length + 1 + (onToggleSelect ? 1 : 0)}>
+                    {newRowGroup === (group.name ?? '__ALL__') ? (
+                      <input
+                        className="tt-newrow-input"
+                        placeholder="Type a task name…"
+                        autoFocus
+                        onBlur={(e) => commitNewRow(e, group)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.target.blur();
+                          if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+                        }}
+                      />
+                    ) : (
+                      <button className="tt-newrow-btn" onClick={() => setNewRowGroup(group.name ?? '__ALL__')}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        New task
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
             </tbody>
           ))}
 
@@ -651,6 +770,7 @@ export default function TaskTable({
           {tasks.length > 0 && (
             <tfoot>
               <tr className="tt-calc-row">
+                {onToggleSelect && <td className="tt-check-col" />}
                 {visibleCols.map(col => (
                   <td key={col.key}>
                     <button

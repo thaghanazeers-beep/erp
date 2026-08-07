@@ -282,3 +282,93 @@
   justify-content: flex-end;
   gap: 6px;
 }
+
+/* ── Inline title + Open button ── */
+.tt-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tt-title-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
+}
+.tt-title-input:hover { background: var(--bg-hover); }
+.tt-title-input:focus { border-color: var(--border-light); background: var(--bg-card); }
+.tt-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity var(--transition), background var(--transition);
+}
+.tt-table tr:hover .tt-open-btn { opacity: 1; }
+.tt-open-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ── Row selection ── */
+.tt-check-col { width: 30px; text-align: center; }
+.tt-row-check {
+  accent-color: var(--primary);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.tt-table tr:hover .tt-row-check,
+.tt-row-check:checked,
+.tt-table thead .tt-row-check { opacity: 1; }
+.tt-row-selected td { background: var(--primary-tint); }
+
+/* ── + New task row ── */
+.tt-newrow td { padding: 0; border-bottom: 1px solid var(--border); }
+.tt-newrow-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition), color var(--transition);
+}
+.tt-newrow-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.tt-newrow-input {
+  width: 100%;
+  padding: 7px 12px;
+  background: var(--bg-card);
+  border: none;
+  border-left: 2px solid var(--primary);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  outline: none;
+}
+.tt-hours-input { max-width: 76px; }

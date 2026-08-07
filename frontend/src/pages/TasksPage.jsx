@@ -206,6 +206,42 @@ export default function TasksPage() {
     getProperties().then(res => setCustomProps(res.data)).catch(() => {});
   }, [activeTeamspaceId]);
 
+  // Inline "+ New task" rows in the table (inherits the group's value)
+  const handleInlineCreate = async (data) => {
+    try {
+      await createTask({
+        id: `task_${Date.now()}`,
+        title: data.title,
+        description: '',
+        status: data.status || 'Not Yet Started',
+        assignee: data.assignee || '',
+        priority: data.priority || '',
+        dueDate: null,
+        createdDate: new Date().toISOString(),
+        customProperties: [],
+        attachments: [],
+        parentId: null,
+        projectId: data.projectId ?? (filterRules.find(r => r.field === 'project' && r.op === 'is' && r.value)?.value || null),
+        sprintId: data.sprintId ?? (filterRules.find(r => r.field === 'sprint' && r.op === 'is' && r.value)?.value || null),
+        estimatedHours: 0,
+        actualHours: 0,
+      });
+      await fetchTasks();
+    } catch (err) { console.error(err); }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Delete ${selectedTasksIds.length} selected tasks? This cannot be undone.`)) return;
+    for (const id of selectedTasksIds) {
+      const t = tasks.find(x => (x.id || x._id) === id);
+      if (t && canEditTask(t)) {
+        try { await deleteTask(id); } catch (err) { console.error(err); }
+      }
+    }
+    setSelectedTasksIds([]);
+    fetchTasks();
+  };
+
   const handleCreateProperty = async (def) => {
     try {
       await createProperty({ id: `p_${Date.now()}`, ...def });
@@ -881,6 +917,23 @@ export default function TasksPage() {
         )}
 
         {/* Table View */}
+        {viewType === 'table' && selectedTasksIds.length > 0 && (
+          <div className="tt-bulkbar">
+            <span className="tt-bulkbar-count">{selectedTasksIds.length} selected</span>
+            <select
+              className="fr-select"
+              defaultValue=""
+              onChange={(e) => { if (e.target.value !== '') { handleBulkChangeSprint(e.target.value); e.target.value = ''; } }}
+            >
+              <option value="" disabled>Move to sprint…</option>
+              <option value="None">No sprint</option>
+              {sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+            </select>
+            <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>Delete</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedTasksIds([])}>Clear</button>
+          </div>
+        )}
+
         {viewType === 'table' && (
           <TaskTable
             key={activeView.id}
@@ -910,6 +963,10 @@ export default function TasksPage() {
             customProps={customProps}
             onCreateProperty={handleCreateProperty}
             onDeleteProperty={isAdminOrOwner ? handleDeleteProperty : null}
+            onCreateTask={handleInlineCreate}
+            selectedIds={selectedTasksIds}
+            onToggleSelect={(id, checked) => setSelectedTasksIds(prev => checked ? [...prev, id] : prev.filter(x => x !== id))}
+            onToggleSelectAll={(checked) => setSelectedTasksIds(checked ? filteredTasks.map(t => t.id) : [])}
           />
         )}
       </div>
