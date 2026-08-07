@@ -10,6 +10,9 @@ const viewSchema = new mongoose.Schema({
   sorts:   { type: [{ key: String, dir: Number, _id: false }], default: [] },
   groupBy: { type: String, default: '' },
   hiddenColumns: { type: [String], default: [] },
+  columnOrder:  { type: [String], default: [] },                 // left-to-right column keys
+  columnWidths: { type: mongoose.Schema.Types.Mixed, default: null }, // { colKey: px }
+  calcs:        { type: mongoose.Schema.Types.Mixed, default: null }, // { colKey: 'count'|'sum'|'avg'|… }
 }, { _id: false });
 
 const teamspaceSchema = new mongoose.Schema({

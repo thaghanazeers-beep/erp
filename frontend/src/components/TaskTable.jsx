@@ -40,7 +40,8 @@ export default function TaskTable({
   formatDate, renderAvatar,
   // View config (controlled by the parent — shared Notion-style view)
   sorts = [], groupBy = '', hidden = [],
-  onPrefsChange, // ({ sorts? | groupBy? | hiddenColumns? }) -> persists to the view
+  columnOrder = [], columnWidths = null, calcs = null,
+  onPrefsChange, // ({ sorts? | groupBy? | hiddenColumns? | columnOrder? | columnWidths? | calcs? })
 }) {
   // Collapsed groups are personal (not part of the shared view)
   const [collapsed, setCollapsed] = useState({});
@@ -48,7 +49,12 @@ export default function TaskTable({
   const [menuFilterOpen, setMenuFilterOpen] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const [calcCol, setCalcCol] = useState(null);   // column key with open Calculate menu
+  const [dragKey, setDragKey] = useState(null);   // column being dragged
+  const [overKey, setOverKey] = useState(null);   // drop target column
+  const [localWidths, setLocalWidths] = useState({}); // live widths while resizing
   const rootRef = useRef(null);
+  const resizeRef = useRef(null);
 
   const setSorts = (updater) =>
     onPrefsChange({ sorts: typeof updater === 'function' ? updater(sorts) : updater });
@@ -59,7 +65,7 @@ export default function TaskTable({
   useEffect(() => {
     const handler = (e) => {
       if (rootRef.current && !rootRef.current.contains(e.target)) {
-        setMenuCol(null); setMenuFilterOpen(false); setShowColumns(false); setShowSort(false);
+        setMenuCol(null); setMenuFilterOpen(false); setShowColumns(false); setShowSort(false); setCalcCol(null);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -132,7 +138,86 @@ export default function TaskTable({
     return [...map.entries()].map(([name, rows]) => ({ name, rows }));
   }, [sorted, groupBy, projects, sprints]);
 
-  const visibleCols = COLUMNS.filter(c => c.always || !hidden.includes(c.key));
+  // Column order: view-defined, unknown/new columns appended; title stays first
+  const orderedCols = useMemo(() => {
+    const byKey = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
+    const ordered = (columnOrder || []).filter(k => byKey[k]).map(k => byKey[k]);
+    const rest = COLUMNS.filter(c => !ordered.includes(c));
+    const all = [...ordered, ...rest];
+    return [all.find(c => c.key === 'title'), ...all.filter(c => c.key !== 'title')];
+  }, [columnOrder]);
+  const visibleCols = orderedCols.filter(c => c.always || !hidden.includes(c.key));
+
+  const moveColumn = (fromKey, toKey) => {
+    if (!fromKey || fromKey === toKey || toKey === 'title') return;
+    const keys = orderedCols.map(c => c.key);
+    const from = keys.indexOf(fromKey);
+    const to = keys.indexOf(toKey);
+    keys.splice(to, 0, keys.splice(from, 1)[0]);
+    onPrefsChange({ columnOrder: keys });
+  };
+
+  // Column resize — live-local while dragging, persisted to the view on release
+  const widths = { ...(columnWidths || {}), ...localWidths };
+  const liveWidths = useRef({});
+  const startResize = (e, key) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.target.closest('th');
+    resizeRef.current = { key, startX: e.clientX, startW: th.offsetWidth };
+    const move = (ev) => {
+      if (!resizeRef.current) return;
+      const { key: k, startX, startW } = resizeRef.current;
+      const next = { ...liveWidths.current, [k]: Math.max(80, startW + ev.clientX - startX) };
+      liveWidths.current = next;
+      setLocalWidths(next);
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      onPrefsChange({ columnWidths: { ...(columnWidths || {}), ...liveWidths.current } });
+      resizeRef.current = null;
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  };
+
+  // Footer "Calculate" (Notion-style aggregates over the filtered rows)
+  const NUMERIC_COLS = ['estimatedHours', 'actualHours'];
+  const CALC_OPTIONS_BASE = [['', 'None'], ['count', 'Count all'], ['count_empty', 'Count empty'], ['count_not_empty', 'Count not empty']];
+  const CALC_OPTIONS_NUM = [...CALC_OPTIONS_BASE, ['sum', 'Sum'], ['avg', 'Average']];
+  const isEmptyCell = (t, key) => {
+    switch (key) {
+      case 'project': return !t.projectId;
+      case 'sprint': return !t.sprintId;
+      case 'assignee': return !t.assignee;
+      case 'priority': return !t.priority;
+      case 'status': return !t.status;
+      case 'dueDate': return !t.dueDate;
+      case 'createdDate': return !t.createdDate;
+      case 'estimatedHours': return !(t.estimatedHours > 0);
+      case 'actualHours': return !(t.actualHours > 0);
+      default: return !t.title;
+    }
+  };
+  const calcDisplay = (key) => {
+    const op = calcs?.[key];
+    if (!op) return null;
+    const rows = sorted;
+    if (op === 'count') return `Count ${rows.length}`;
+    if (op === 'count_empty') return `Empty ${rows.filter(t => isEmptyCell(t, key)).length}`;
+    if (op === 'count_not_empty') return `Not empty ${rows.filter(t => !isEmptyCell(t, key)).length}`;
+    const sum = rows.reduce((acc, t) => acc + (Number(t[key]) || 0), 0);
+    if (op === 'sum') return `Sum ${Math.round(sum * 10) / 10}h`;
+    if (op === 'avg') return `Avg ${rows.length ? Math.round((sum / rows.length) * 10) / 10 : 0}h`;
+    return null;
+  };
+  const setCalc = (key, op) => {
+    const next = { ...(calcs || {}) };
+    if (op) next[key] = op; else delete next[key];
+    onPrefsChange({ calcs: next });
+    setCalcCol(null);
+  };
 
   const distinctFilterValues = (col) => {
     switch (col.filterKey) {
@@ -294,8 +379,21 @@ export default function TaskTable({
             <tr>
               {visibleCols.map(col => {
                 const sortRule = sorts.find(s => s.key === col.key);
+                const w = widths[col.key];
                 return (
-                <th key={col.key} style={col.width ? { minWidth: col.width } : {}}>
+                <th
+                  key={col.key}
+                  className={overKey === col.key && dragKey && dragKey !== col.key ? 'tt-th-dropover' : ''}
+                  style={{
+                    ...(w ? { width: w, minWidth: w, maxWidth: w } : (col.width ? { minWidth: col.width } : {})),
+                  }}
+                  draggable={col.key !== 'title'}
+                  onDragStart={(e) => { setDragKey(col.key); e.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={(e) => { e.preventDefault(); if (dragKey) setOverKey(col.key); }}
+                  onDragLeave={() => setOverKey(k => (k === col.key ? null : k))}
+                  onDrop={(e) => { e.preventDefault(); moveColumn(dragKey, col.key); setDragKey(null); setOverKey(null); }}
+                  onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+                >
                   <button
                     className={`tt-th ${menuCol === col.key ? 'tt-th-open' : ''} ${sortRule ? 'tt-th-sorted' : ''}`}
                     onClick={() => { setMenuCol(menuCol === col.key ? null : col.key); setMenuFilterOpen(false); setShowColumns(false); setShowSort(false); }}
@@ -305,6 +403,7 @@ export default function TaskTable({
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: sortRule.dir === -1 ? 'rotate(180deg)' : 'none' }}><polyline points="6 9 12 15 18 9"/></svg>
                     )}
                   </button>
+                  <span className="tt-resize" onMouseDown={(e) => startResize(e, col.key)} />
 
                   {menuCol === col.key && (
                     <div className="tt-popover tt-th-menu">
@@ -386,6 +485,43 @@ export default function TaskTable({
               ))}
             </tbody>
           ))}
+
+          {/* Calculate row (Notion-style aggregates over the filtered rows) */}
+          {tasks.length > 0 && (
+            <tfoot>
+              <tr className="tt-calc-row">
+                {visibleCols.map(col => (
+                  <td key={col.key}>
+                    <button
+                      className={`tt-calc-btn ${calcs?.[col.key] ? 'tt-calc-set' : ''}`}
+                      onClick={() => { setCalcCol(calcCol === col.key ? null : col.key); setMenuCol(null); }}
+                    >
+                      {calcDisplay(col.key) || (
+                        <span className="tt-calc-hint">
+                          Calculate
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </span>
+                      )}
+                    </button>
+                    {calcCol === col.key && (
+                      <div className="tt-popover tt-calc-menu">
+                        {(NUMERIC_COLS.includes(col.key) ? CALC_OPTIONS_NUM : CALC_OPTIONS_BASE).map(([op, label]) => (
+                          <button
+                            key={op || 'none'}
+                            className={`tt-menu-item ${(calcs?.[col.key] || '') === op ? 'tt-menu-item-active' : ''}`}
+                            onClick={() => setCalc(col.key, op)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                ))}
+                <td />
+              </tr>
+            </tfoot>
+          )}
         </table>
         {tasks.length === 0 && <div className="empty-state" style={{ marginTop: 32 }}><p>No tasks match.</p></div>}
       </div>

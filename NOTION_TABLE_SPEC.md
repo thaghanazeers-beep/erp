@@ -177,11 +177,11 @@ always win afterwards.
 | Column header menu (sort/filter/hide) | ✅ |
 | Inline cell editing (status/assignee/priority) | ✅ with role rules |
 | Shared view defaults + personal override | ✅ v5 — every view edit saves for the whole team (Notion semantics) |
-| Nested filter groups (3 levels) | ❌ roadmap |
+| Nested filter groups (3 levels) | ❌ roadmap — `is any of` / `is none of` (✅ v5) covers the common case |
 | Relative date values (today, next week…) | ✅ v5 (@today, @tomorrow, ±week, ±month) |
 | Per-view (per-tab) filter/sort config | ✅ v5 — views stored on the teamspace, shared, member-editable, debounced auto-save |
-| Column drag-reorder + resize | ❌ roadmap |
-| Footer aggregates (sum/count per column) | ❌ roadmap |
+| Column drag-reorder + resize | ✅ v5 — persisted per view |
+| Footer aggregates (sum/count per column) | ✅ v5 — Calculate row: count / count empty / count not empty / sum / average |
 | Custom property types on tasks | ❌ schema exists (`customProperties`), no UI |
 
 ---

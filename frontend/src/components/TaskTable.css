@@ -198,3 +198,50 @@
 .tt-row-actions { text-align: right; }
 .tt-row-actions .btn-icon { opacity: 0; }
 .tt-table tr:hover .tt-row-actions .btn-icon { opacity: 1; }
+
+/* ── Column drag + resize ── */
+.tt-th-dropover { box-shadow: inset 2px 0 0 var(--primary); }
+.tt-resize {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  right: -3px;
+  width: 7px;
+  cursor: col-resize;
+  border-radius: 2px;
+  z-index: 5;
+}
+.tt-resize:hover, .tt-resize:active { background: var(--primary-glow); }
+
+/* ── Calculate footer ── */
+.tt-calc-row td {
+  position: relative;
+  padding: 2px 6px;
+  border-bottom: none;
+  border-top: 1px solid var(--border);
+}
+.tt-calc-btn {
+  width: 100%;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  text-align: right;
+  white-space: nowrap;
+}
+.tt-calc-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.tt-calc-set { color: var(--text-secondary); font-weight: 500; }
+.tt-calc-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.tt-calc-row td:hover .tt-calc-hint { opacity: 1; }
+.tt-calc-menu { bottom: calc(100% + 2px); right: 0; min-width: 160px; }
+.tt-menu-item-active { background: var(--primary-tint); }

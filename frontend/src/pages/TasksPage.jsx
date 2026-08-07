@@ -114,6 +114,7 @@ export default function TasksPage() {
     ],
     select: [
       ['is', 'is'], ['is_not', 'is not'],
+      ['is_any_of', 'is any of'], ['is_none_of', 'is none of'],
       ['is_empty', 'is empty'], ['is_not_empty', 'is not empty'],
     ],
     date: [
@@ -142,8 +143,21 @@ export default function TasksPage() {
   };
   const relDateLabel = (v) => REL_DATES.find(([tok]) => tok === v)?.[1];
 
+  const MULTI_OPS = ['is_any_of', 'is_none_of'];
+  const fieldOptions = (field) => {
+    switch (field) {
+      case 'assignee': return teamMembers.map(m => ({ v: m.name, l: m.name }));
+      case 'project': return projects.map(p => ({ v: p._id, l: p.name }));
+      case 'sprint': return sprints.map(s => ({ v: s._id, l: s.name }));
+      case 'status': return STATUSES.map(s => ({ v: s, l: s }));
+      case 'priority': return PRIORITIES.map(p => ({ v: p, l: p }));
+      default: return [];
+    }
+  };
+
   // ── Notion-style rule filters — live on the ACTIVE VIEW ──────────────
   const [openFilter, setOpenFilter] = useState(null); // filter panel open?
+  const [openMulti, setOpenMulti] = useState(null);   // rule id with open multi-select
   const [searchQuery, setSearchQuery] = useState(''); // personal, not saved to the view
   const filterRules = activeView.filters?.rules || [];
   const filterConj = activeView.filters?.conjunction || 'and';
@@ -323,6 +337,8 @@ export default function TasksPage() {
       case 'not_contains': return !String(raw || '').toLowerCase().includes(String(val || '').toLowerCase());
       case 'is': return type === 'date' ? (!!raw && sameDay(raw, val)) : raw === val;
       case 'is_not': return type === 'date' ? (!raw || !sameDay(raw, val)) : raw !== val;
+      case 'is_any_of': return Array.isArray(val) && val.includes(raw);
+      case 'is_none_of': return !Array.isArray(val) || !val.includes(raw);
       case 'before': return !!raw && new Date(raw) < new Date(val + 'T00:00:00');
       case 'after': return !!raw && new Date(raw) > new Date(val + 'T23:59:59');
       case 'on_or_before': return !!raw && new Date(raw) <= new Date(val + 'T23:59:59');
@@ -332,7 +348,10 @@ export default function TasksPage() {
   };
 
   // Rules missing a needed value are inactive until filled in
-  const activeRules = filterRules.filter(r => NO_VALUE_OPS.includes(r.op) || (r.value !== '' && r.value != null));
+  const activeRules = filterRules.filter(r =>
+    NO_VALUE_OPS.includes(r.op)
+    || (Array.isArray(r.value) ? r.value.length > 0 : (r.value !== '' && r.value != null))
+  );
 
   const filteredTasks = tasks.filter(t => {
     if (t.parentId) return false;
@@ -341,12 +360,16 @@ export default function TasksPage() {
     return filterConj === 'and' ? activeRules.every(r => matchRule(t, r)) : activeRules.some(r => matchRule(t, r));
   });
 
+  const singleValueLabel = (field, v) => {
+    if (field === 'project') return projects.find(p => p._id === v)?.name || v;
+    if (field === 'sprint') return sprints.find(s => s._id === v)?.name || v;
+    return v;
+  };
   const ruleValueLabel = (r) => {
     if (NO_VALUE_OPS.includes(r.op)) return '';
-    if (r.field === 'project') return projects.find(p => p._id === r.value)?.name || r.value;
-    if (r.field === 'sprint') return sprints.find(s => s._id === r.value)?.name || r.value;
+    if (Array.isArray(r.value)) return r.value.map(v => singleValueLabel(r.field, v)).join(', ');
     if (FILTER_FIELDS[r.field]?.type === 'date') return relDateLabel(r.value) || r.value;
-    return r.value;
+    return singleValueLabel(r.field, r.value);
   };
   const opLabel = (r) => (FILTER_OPS[FILTER_FIELDS[r.field]?.type] || []).find(([op]) => op === r.op)?.[1] || r.op;
 
@@ -517,18 +540,48 @@ export default function TasksPage() {
                       <select className="fr-select fr-field" value={r.field} onChange={e => updateRule(r.id, { field: e.target.value })}>
                         {Object.entries(FILTER_FIELDS).map(([k, f]) => <option key={k} value={k}>{f.label}</option>)}
                       </select>
-                      <select className="fr-select fr-op" value={r.op} onChange={e => updateRule(r.id, { op: e.target.value, ...(NO_VALUE_OPS.includes(e.target.value) ? { value: '' } : {}) })}>
+                      <select className="fr-select fr-op" value={r.op} onChange={e => {
+                        const op = e.target.value;
+                        const patch = { op };
+                        if (NO_VALUE_OPS.includes(op)) patch.value = '';
+                        else if (MULTI_OPS.includes(op)) patch.value = Array.isArray(r.value) ? r.value : [];
+                        else if (Array.isArray(r.value)) patch.value = '';
+                        updateRule(r.id, patch);
+                      }}>
                         {FILTER_OPS[type].map(([op, label]) => <option key={op} value={op}>{label}</option>)}
                       </select>
-                      {needsValue && type === 'select' && (
+                      {needsValue && type === 'select' && !MULTI_OPS.includes(r.op) && (
                         <select className="fr-select fr-value" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })}>
                           <option value="">Select…</option>
-                          {r.field === 'assignee' && teamMembers.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
-                          {r.field === 'project' && projects.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-                          {r.field === 'sprint' && sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                          {r.field === 'status' && STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                          {r.field === 'priority' && PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                          {fieldOptions(r.field).map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                         </select>
+                      )}
+                      {needsValue && type === 'select' && MULTI_OPS.includes(r.op) && (
+                        <span className="fr-multi-wrap">
+                          <button type="button" className="fr-select fr-multi-btn" onClick={() => setOpenMulti(openMulti === r.id ? null : r.id)}>
+                            {Array.isArray(r.value) && r.value.length
+                              ? `${r.value.length} selected`
+                              : 'Select…'}
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                          </button>
+                          {openMulti === r.id && (
+                            <div className="fr-multi-pop">
+                              {fieldOptions(r.field).map(o => (
+                                <label key={o.v} className="tt-popover-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={Array.isArray(r.value) && r.value.includes(o.v)}
+                                    onChange={() => {
+                                      const cur = Array.isArray(r.value) ? r.value : [];
+                                      updateRule(r.id, { value: cur.includes(o.v) ? cur.filter(x => x !== o.v) : [...cur, o.v] });
+                                    }}
+                                  />
+                                  <span>{o.l}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </span>
                       )}
                       {needsValue && type === 'date' && (
                         <span className="fr-date-wrap">
@@ -782,6 +835,9 @@ export default function TasksPage() {
             sorts={activeView.sorts || []}
             groupBy={activeView.groupBy || ''}
             hidden={activeView.hiddenColumns || []}
+            columnOrder={activeView.columnOrder || []}
+            columnWidths={activeView.columnWidths || null}
+            calcs={activeView.calcs || null}
             onPrefsChange={patchActiveView}
           />
         )}

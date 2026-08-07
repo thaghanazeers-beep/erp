@@ -141,6 +141,30 @@
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.fr-multi-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.fr-multi-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.fr-multi-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 350;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+}
 .fr-date-wrap { flex: 1; display: flex; gap: 6px; min-width: 0; }
 .fr-date-wrap .fr-select { flex: 1; }
 .filter-panel-scope {
