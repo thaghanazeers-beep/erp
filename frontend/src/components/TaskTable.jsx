@@ -31,11 +31,6 @@ const GROUP_OPTIONS = [
   { key: 'sprint',   label: 'Sprint' },
 ];
 
-const PREFS_KEY = 'tasks_table_prefs';
-const loadPrefs = () => {
-  try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; }
-};
-
 export default function TaskTable({
   tasks, projects, sprints, teamMembers,
   statuses, priorities, priorityColor,
@@ -43,22 +38,22 @@ export default function TaskTable({
   onStatusChange, onInlineUpdate, onDelete, onOpen,
   onFilter, // (filterKey, value) -> applies a page-level filter
   formatDate, renderAvatar,
+  // View config (controlled by the parent — shared Notion-style view)
+  sorts = [], groupBy = '', hidden = [],
+  onPrefsChange, // ({ sorts? | groupBy? | hiddenColumns? }) -> persists to the view
 }) {
-  const prefs = useRef(loadPrefs()).current;
-  // Ordered sort rules — first rule sorts, later rules break ties (Notion-style)
-  const [sorts, setSorts] = useState(prefs.sorts || (prefs.sort ? [prefs.sort] : []));
-  const [groupBy, setGroupBy] = useState(prefs.groupBy ?? '');
-  const [hidden, setHidden] = useState(prefs.hidden || ['createdDate']);
-  const [collapsed, setCollapsed] = useState(prefs.collapsed || {});
+  // Collapsed groups are personal (not part of the shared view)
+  const [collapsed, setCollapsed] = useState({});
   const [menuCol, setMenuCol] = useState(null);   // column key with open header menu
   const [menuFilterOpen, setMenuFilterOpen] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
   const [showSort, setShowSort] = useState(false);
   const rootRef = useRef(null);
 
-  useEffect(() => {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ sorts, groupBy, hidden, collapsed }));
-  }, [sorts, groupBy, hidden, collapsed]);
+  const setSorts = (updater) =>
+    onPrefsChange({ sorts: typeof updater === 'function' ? updater(sorts) : updater });
+  const setGroupBy = (v) => onPrefsChange({ groupBy: v });
+  const setHidden = (v) => onPrefsChange({ hiddenColumns: v });
 
   // Close any open popover on outside click
   useEffect(() => {

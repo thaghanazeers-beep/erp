@@ -344,6 +344,25 @@ app.put('/api/teamspaces/:id', async (req, res) => {
   }
 });
 
+// Views are editable by every member of the teamspace (Notion semantics:
+// anyone with access can adjust shared views), not just the owner.
+app.put('/api/teamspaces/:id/views', async (req, res) => {
+  try {
+    const ts = await Teamspace.findById(req.params.id);
+    if (!ts) return res.status(404).json({ message: 'Teamspace not found' });
+    const isMember = req.user.role === 'Admin'
+      || (ts.ownerId && ts.ownerId.equals(req.user._id))
+      || ts.members.some(m => m.userId && m.userId.equals(req.user._id));
+    if (!isMember) return res.status(403).json({ message: 'Not a member of this teamspace' });
+    if (!Array.isArray(req.body.views)) return res.status(400).json({ message: 'views must be an array' });
+    ts.views = req.body.views;
+    await ts.save();
+    res.json(ts.views);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/teamspaces/:id', requireAdmin, async (req, res) => {
   try {
     await Teamspace.findByIdAndDelete(req.params.id);

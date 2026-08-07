@@ -141,6 +141,14 @@
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
+.fr-date-wrap { flex: 1; display: flex; gap: 6px; min-width: 0; }
+.fr-date-wrap .fr-select { flex: 1; }
+.filter-panel-scope {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: right;
+  max-width: 220px;
+}
 .filter-panel-hint {
   margin: 8px 16px 0;
   font-size: 0.72rem;

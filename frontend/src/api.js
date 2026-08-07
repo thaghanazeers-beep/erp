@@ -116,6 +116,8 @@ export const getTeamspaces = () => API.get('/teamspaces');
 export const createTeamspace = (data) => API.post('/teamspaces', data);
 export const updateTeamspace = (id, data) => API.put(`/teamspaces/${id}`, data);
 export const deleteTeamspace = (id) => API.delete(`/teamspaces/${id}`);
+// Shared task views (Notion-style) — any member of the teamspace may edit
+export const updateTeamspaceViews = (id, views) => API.put(`/teamspaces/${id}/views`, { views });
 
 // Org Chart
 export const getOrgChart = (teamspaceId) => API.get('/orgchart', { params: teamspaceId ? { teamspaceId } : {} });

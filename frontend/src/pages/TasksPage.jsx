@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getTasks, createTask, updateTask, deleteTask, getTeam, getProjects, getSprints, getTeamspaces, updateTeamspace } from '../api';
+import { getTasks, createTask, updateTask, deleteTask, getTeam, getProjects, getSprints, getTeamspaces, updateTeamspaceViews } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import TaskDetailPage from './TaskDetailPage';
@@ -30,23 +30,63 @@ export default function TasksPage() {
   const { user } = useAuth();
   const { activeTeamspaceId } = useTeamspace();
   const [tasks, setTasks] = useState([]);
-  const [views, setViews] = useState(() => {
-    // v2: Table is the default first view (one-time migration for saved tabs)
-    const saved = localStorage.getItem('tasks_views');
-    const migrated = localStorage.getItem('tasks_views_v2');
-    if (saved && migrated) return JSON.parse(saved);
-    localStorage.setItem('tasks_views_v2', '1');
-    return [
-      { id: 'v1', type: 'table', name: 'Table' },
-      { id: 'v2', type: 'board', name: 'Board' }
-    ];
-  });
-  const [activeViewId, setActiveViewId] = useState(views[0]?.id || 'v1');
-  const viewType = views.find(v => v.id === activeViewId)?.type || 'board';
+
+  // ── Views (Notion-style shared database views) ──────────────────────
+  // A view = { id, name, type, filters, sorts, groupBy, hiddenColumns }.
+  // Real teamspaces store views on the server (shared by every member);
+  // the Personal space keeps them in localStorage.
+  const DEFAULT_VIEWS = [
+    { id: 'v_table', name: 'Table', type: 'table', filters: null, sorts: [], groupBy: '', hiddenColumns: ['createdDate'] },
+    { id: 'v_board', name: 'Board', type: 'board', filters: null, sorts: [], groupBy: '', hiddenColumns: [] },
+  ];
+  const isPersonalSpace = !activeTeamspaceId || activeTeamspaceId === '__personal__';
+  const tsKey = isPersonalSpace ? 'personal' : activeTeamspaceId;
+
+  const [views, setViews] = useState(DEFAULT_VIEWS);
+  const [activeViewId, setActiveViewId] = useState('v_table');
+  const activeView = views.find(v => v.id === activeViewId) || views[0] || DEFAULT_VIEWS[0];
+  const viewType = activeView.type || 'table';
+
+  const saveTimer = useRef(null);
+  const persistViews = (next) => {
+    if (isPersonalSpace) {
+      localStorage.setItem('tasks_views_personal', JSON.stringify(next));
+      return;
+    }
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      updateTeamspaceViews(activeTeamspaceId, next).catch(err => console.error('view save failed', err));
+    }, 700);
+  };
+  const applyViews = (next) => { setViews(next); persistViews(next); };
+  const patchActiveView = (patch) => {
+    setViews(prev => {
+      const next = prev.map(v => v.id === activeViewId ? { ...v, ...patch } : v);
+      persistViews(next);
+      return next;
+    });
+  };
+
+  // Load views whenever the teamspace changes
+  useEffect(() => {
+    const rememberedId = localStorage.getItem(`tasks_active_view_${tsKey}`);
+    const finish = (loaded) => {
+      const vs = loaded && loaded.length ? loaded : DEFAULT_VIEWS;
+      setViews(vs);
+      setActiveViewId(vs.some(v => v.id === rememberedId) ? rememberedId : vs[0].id);
+    };
+    if (isPersonalSpace) {
+      try { finish(JSON.parse(localStorage.getItem('tasks_views_personal'))); } catch { finish(null); }
+    } else {
+      getTeamspaces()
+        .then(res => finish(res.data.find(t => t._id === activeTeamspaceId)?.views))
+        .catch(() => finish(null));
+    }
+  }, [activeTeamspaceId]);
 
   useEffect(() => {
-    localStorage.setItem('tasks_views', JSON.stringify(views));
-  }, [views]);
+    localStorage.setItem(`tasks_active_view_${tsKey}`, activeViewId);
+  }, [activeViewId, tsKey]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
@@ -84,19 +124,36 @@ export default function TasksPage() {
   };
   const NO_VALUE_OPS = ['is_empty', 'is_not_empty'];
 
-  // ── Notion-style rule filters ─────────────────────────────
-  // Each rule = { id, field, op, value }; rules combine with AND or OR.
-  const [openFilter, setOpenFilter] = useState(null); // filter panel open?
-  const [filterRules, setFilterRules] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('mf_rules')) || []; } catch { return []; }
-  });
-  const [filterConj, setFilterConj] = useState(() => localStorage.getItem('mf_conj') || 'and');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Relative date values (Notion-style) — stored as @tokens, resolved at
+  // evaluation time so "is after today" stays correct tomorrow.
+  const REL_DATES = [
+    ['@today', 'Today'], ['@tomorrow', 'Tomorrow'], ['@yesterday', 'Yesterday'],
+    ['@week_ago', 'One week ago'], ['@week_from_now', 'One week from now'],
+    ['@month_ago', 'One month ago'], ['@month_from_now', 'One month from now'],
+  ];
+  const resolveDateValue = (v) => {
+    if (!v || !String(v).startsWith('@')) return v;
+    const d = new Date();
+    if (v === '@month_ago') d.setMonth(d.getMonth() - 1);
+    else if (v === '@month_from_now') d.setMonth(d.getMonth() + 1);
+    else d.setDate(d.getDate() + ({ '@today': 0, '@tomorrow': 1, '@yesterday': -1, '@week_ago': -7, '@week_from_now': 7 }[v] || 0));
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  const relDateLabel = (v) => REL_DATES.find(([tok]) => tok === v)?.[1];
 
-  useEffect(() => {
-    localStorage.setItem('mf_rules', JSON.stringify(filterRules));
-    localStorage.setItem('mf_conj', filterConj);
-  }, [filterRules, filterConj]);
+  // ── Notion-style rule filters — live on the ACTIVE VIEW ──────────────
+  const [openFilter, setOpenFilter] = useState(null); // filter panel open?
+  const [searchQuery, setSearchQuery] = useState(''); // personal, not saved to the view
+  const filterRules = activeView.filters?.rules || [];
+  const filterConj = activeView.filters?.conjunction || 'and';
+  const setFilterRules = (updater) => {
+    const rules = typeof updater === 'function' ? updater(filterRules) : updater;
+    patchActiveView({ filters: { conjunction: filterConj, rules } });
+  };
+  const setFilterConj = (conjunction) => {
+    patchActiveView({ filters: { conjunction, rules: filterRules } });
+  };
 
   const dragItem = useRef(null);
 
@@ -258,17 +315,18 @@ export default function TasksPage() {
   const matchRule = (t, r) => {
     const raw = ruleRaw(t, r.field);
     const type = FILTER_FIELDS[r.field]?.type;
+    const val = type === 'date' ? resolveDateValue(r.value) : r.value;
     switch (r.op) {
       case 'is_empty': return !raw;
       case 'is_not_empty': return !!raw;
-      case 'contains': return String(raw || '').toLowerCase().includes(String(r.value || '').toLowerCase());
-      case 'not_contains': return !String(raw || '').toLowerCase().includes(String(r.value || '').toLowerCase());
-      case 'is': return type === 'date' ? (!!raw && sameDay(raw, r.value)) : raw === r.value;
-      case 'is_not': return type === 'date' ? (!raw || !sameDay(raw, r.value)) : raw !== r.value;
-      case 'before': return !!raw && new Date(raw) < new Date(r.value + 'T00:00:00');
-      case 'after': return !!raw && new Date(raw) > new Date(r.value + 'T23:59:59');
-      case 'on_or_before': return !!raw && new Date(raw) <= new Date(r.value + 'T23:59:59');
-      case 'on_or_after': return !!raw && new Date(raw) >= new Date(r.value + 'T00:00:00');
+      case 'contains': return String(raw || '').toLowerCase().includes(String(val || '').toLowerCase());
+      case 'not_contains': return !String(raw || '').toLowerCase().includes(String(val || '').toLowerCase());
+      case 'is': return type === 'date' ? (!!raw && sameDay(raw, val)) : raw === val;
+      case 'is_not': return type === 'date' ? (!raw || !sameDay(raw, val)) : raw !== val;
+      case 'before': return !!raw && new Date(raw) < new Date(val + 'T00:00:00');
+      case 'after': return !!raw && new Date(raw) > new Date(val + 'T23:59:59');
+      case 'on_or_before': return !!raw && new Date(raw) <= new Date(val + 'T23:59:59');
+      case 'on_or_after': return !!raw && new Date(raw) >= new Date(val + 'T00:00:00');
       default: return true;
     }
   };
@@ -287,6 +345,7 @@ export default function TasksPage() {
     if (NO_VALUE_OPS.includes(r.op)) return '';
     if (r.field === 'project') return projects.find(p => p._id === r.value)?.name || r.value;
     if (r.field === 'sprint') return sprints.find(s => s._id === r.value)?.name || r.value;
+    if (FILTER_FIELDS[r.field]?.type === 'date') return relDateLabel(r.value) || r.value;
     return r.value;
   };
   const opLabel = (r) => (FILTER_OPS[FILTER_FIELDS[r.field]?.type] || []).find(([op]) => op === r.op)?.[1] || r.op;
@@ -337,41 +396,8 @@ export default function TasksPage() {
     return name.charAt(0).toUpperCase();
   };
 
-  // ── Team default filters ("Save for everyone") ──────────
-  // Admins / Team Owners store the current filters on the teamspace; members
-  // who have no filters of their own get them applied automatically.
-  const canSaveForEveryone = isAdminOrOwner && activeTeamspaceId && activeTeamspaceId !== '__personal__';
-  const [saveDefaultState, setSaveDefaultState] = useState(''); // '', 'saving', 'saved', 'error'
-
-  const handleSaveForEveryone = async () => {
-    if (!canSaveForEveryone) return;
-    setSaveDefaultState('saving');
-    try {
-      await updateTeamspace(activeTeamspaceId, {
-        defaultTaskFilters: { conjunction: filterConj, rules: filterRules },
-      });
-      setSaveDefaultState('saved');
-      setTimeout(() => setSaveDefaultState(''), 2500);
-    } catch (err) {
-      console.error(err);
-      setSaveDefaultState('error');
-      setTimeout(() => setSaveDefaultState(''), 3000);
-    }
-  };
-
-  // Apply the teamspace's saved default filters when this user has none set
-  useEffect(() => {
-    if (!activeTeamspaceId || activeTeamspaceId === '__personal__') return;
-    if (filterRules.length > 0) return;
-    getTeamspaces().then(res => {
-      const ts = res.data.find(t => t._id === activeTeamspaceId);
-      const d = ts?.defaultTaskFilters;
-      if (!d || !Array.isArray(d.rules) || d.rules.length === 0) return;
-      setFilterRules(d.rules);
-      if (d.conjunction) setFilterConj(d.conjunction);
-    }).catch(() => {});
-  }, [activeTeamspaceId]);
-
+  // In v5, filters/sorts live ON the shared view — every edit saves for the
+  // whole teamspace automatically (Notion semantics). Personal space stays local.
   const clearFilters = () => {
     setFilterRules([]);
     setSearchQuery('');
@@ -393,9 +419,21 @@ export default function TasksPage() {
 
   const handleAddView = (type, label) => {
     const newId = `v${Date.now()}`;
-    const newViews = [...views, { id: newId, type, name: label }];
-    setViews(newViews);
+    const newView = { id: newId, name: label, type, filters: null, sorts: [], groupBy: '', hiddenColumns: [] };
+    applyViews([...views, newView]);
     setActiveViewId(newId);
+  };
+
+  const handleRenameView = (viewId, name) => {
+    if (!name?.trim()) return;
+    applyViews(views.map(v => v.id === viewId ? { ...v, name: name.trim() } : v));
+  };
+
+  const handleDeleteView = (viewId) => {
+    if (views.length <= 1) return;
+    const next = views.filter(v => v.id !== viewId);
+    applyViews(next);
+    if (activeViewId === viewId) setActiveViewId(next[0].id);
   };
 
   const handleSelectAll = (e) => {
@@ -418,11 +456,14 @@ export default function TasksPage() {
 
   return (
     <div className="tasks-page">
-      <ViewTabs 
-        views={views} 
-        activeViewId={activeViewId} 
-        onChangeView={setActiveViewId} 
-        onAddView={handleAddView} 
+      <ViewTabs
+        views={views}
+        activeViewId={activeViewId}
+        onChangeView={setActiveViewId}
+        onAddView={handleAddView}
+        onRenameView={handleRenameView}
+        onDeleteView={handleDeleteView}
+        allowedTypes={['table', 'board']}
       />
 
       {/* ─── Toolbar ─── */}
@@ -490,7 +531,19 @@ export default function TasksPage() {
                         </select>
                       )}
                       {needsValue && type === 'date' && (
-                        <input className="fr-select fr-value" type="date" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
+                        <span className="fr-date-wrap">
+                          <select
+                            className="fr-select"
+                            value={String(r.value).startsWith('@') ? r.value : '__custom__'}
+                            onChange={e => updateRule(r.id, { value: e.target.value === '__custom__' ? '' : e.target.value })}
+                          >
+                            {REL_DATES.map(([tok, label]) => <option key={tok} value={tok}>{label}</option>)}
+                            <option value="__custom__">Custom date…</option>
+                          </select>
+                          {!String(r.value).startsWith('@') && (
+                            <input className="fr-select" type="date" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
+                          )}
+                        </span>
                       )}
                       {needsValue && type === 'text' && (
                         <input className="fr-select fr-value" type="text" placeholder="Type a value…" value={r.value} onChange={e => updateRule(r.id, { value: e.target.value })} />
@@ -509,18 +562,12 @@ export default function TasksPage() {
 
                 <div className="filter-panel-footer">
                   <button className="btn btn-ghost btn-sm" onClick={clearFilters} disabled={filterRules.length === 0}>Clear all</button>
-                  {canSaveForEveryone && (
-                    <button className="btn btn-primary btn-sm" onClick={handleSaveForEveryone} disabled={saveDefaultState === 'saving'}>
-                      {saveDefaultState === 'saving' ? 'Saving…' : saveDefaultState === 'saved' ? '✓ Saved for team' : 'Save for everyone'}
-                    </button>
-                  )}
+                  <span className="filter-panel-scope">
+                    {isPersonalSpace
+                      ? 'Saved to this view (only you)'
+                      : `Saved to the "${activeView.name}" view for everyone`}
+                  </span>
                 </div>
-                {saveDefaultState === 'error' && (
-                  <p className="filter-panel-hint filter-panel-error">Could not save the team default — try again.</p>
-                )}
-                {canSaveForEveryone && saveDefaultState === '' && filterRules.length > 0 && (
-                  <p className="filter-panel-hint">Saves these filters as the default for every member of this teamspace.</p>
-                )}
               </div>
             )}
           </div>
@@ -715,6 +762,7 @@ export default function TasksPage() {
         {/* Table View */}
         {viewType === 'table' && (
           <TaskTable
+            key={activeView.id}
             tasks={filteredTasks}
             projects={projects}
             sprints={sprints}
@@ -731,6 +779,10 @@ export default function TasksPage() {
             onFilter={applyColumnFilter}
             formatDate={formatDate}
             renderAvatar={renderAvatar}
+            sorts={activeView.sorts || []}
+            groupBy={activeView.groupBy || ''}
+            hidden={activeView.hiddenColumns || []}
+            onPrefsChange={patchActiveView}
           />
         )}
       </div>
