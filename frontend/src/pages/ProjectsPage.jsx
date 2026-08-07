@@ -233,7 +233,7 @@ export default function ProjectsPage() {
                           <div className="task-card-meta">
                             {task.dueDate && <span className="task-card-date">📅 {formatDate(task.dueDate)}</span>}
                             {(task.estimatedHours > 0 || task.actualHours > 0) && (
-                              <span className="task-card-hours">⏱ {task.actualHours || 0}/{task.estimatedHours || 0}h</span>
+                              <span className="task-card-hours">{task.actualHours || 0}/{task.estimatedHours || 0}h</span>
                             )}
                           </div>
                           {task.assignee && (
@@ -266,7 +266,7 @@ export default function ProjectsPage() {
                 <div className="list-item-right">
                   {task.assignee && <span className="list-item-assignee">{task.assignee}</span>}
                   {(task.estimatedHours > 0 || task.actualHours > 0) && (
-                    <span className="list-item-hours">⏱ {task.actualHours || 0}/{task.estimatedHours || 0}h</span>
+                    <span className="list-item-hours">{task.actualHours || 0}/{task.estimatedHours || 0}h</span>
                   )}
                   {task.dueDate && <span className="list-item-date">{formatDate(task.dueDate)}</span>}
                   <span className={`badge ${STATUS_BADGE[task.status] || 'badge-notstarted'}`}>{task.status}</span>

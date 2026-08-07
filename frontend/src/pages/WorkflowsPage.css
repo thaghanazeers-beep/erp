@@ -1,4 +1,4 @@
-.workflows-page { display: flex; flex-direction: column; gap: 24px; }
+.workflows-page { display: flex; flex-direction: column; gap: 16px; }
 
 .wf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
 

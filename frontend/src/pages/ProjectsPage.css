@@ -1,4 +1,4 @@
-.projects-page { display: flex; flex-direction: column; gap: 24px; }
+.projects-page { display: flex; flex-direction: column; gap: 16px; }
 
 .projects-grid {
   display: grid;
@@ -7,7 +7,7 @@
 }
 
 .project-card {
-  padding: 24px;
+  padding: 16px 18px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -29,7 +29,7 @@
   align-items: flex-start;
 }
 .project-icon { font-size: 1.8rem; }
-.project-name { font-size: 1.05rem; font-weight: 600; }
+.project-name { font-size: 0.95rem; font-weight: 600; }
 .project-desc { font-size: 0.8rem; color: var(--text-secondary); }
 .project-date { font-size: 0.7rem; color: var(--text-muted); margin-top: 8px; }
 
@@ -40,10 +40,10 @@
   gap: 6px;
 }
 .picker-item {
-  width: 40px; height: 40px;
+  width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.2rem;
-  border: 2px solid var(--border);
+  font-size: 1.1rem;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   cursor: pointer;
@@ -70,11 +70,11 @@
 }
 .project-task-count {
   font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--primary-light);
-  background: rgba(35,131,226, 0.1);
-  padding: 2px 8px;
-  border-radius: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
 }
 
 /* ── Projects Gallery ── */
@@ -105,7 +105,7 @@
   flex-direction: column;
   gap: 4px;
 }
-.project-gallery-body h3 { font-size: 1rem; font-weight: 700; }
+.project-gallery-body h3 { font-size: 0.95rem; font-weight: 600; }
 .project-gallery-body p { font-size: 0.8rem; color: var(--text-secondary); height: 32px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.project-gallery-footer { margin-top: 12px; font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
+.project-gallery-footer { margin-top: 12px; font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
 

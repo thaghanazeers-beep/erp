@@ -447,15 +447,19 @@ export default function TasksPage() {
                   </div>
                   <div className="board-column-cards">
                     {statusTasks.map((task, i) => (
-                      <div className="task-card animate-in" key={task.id} style={{ animationDelay: `${i * 0.05}s`, opacity: canEditTask(task) ? 1 : 0.8 }}
+                      <div className="task-card animate-in" key={task.id} style={{ animationDelay: `${Math.min(i, 12) * 0.03}s`, opacity: canEditTask(task) ? 1 : 0.8 }}
                         draggable={canEditTask(task)} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd}
                         onClick={() => setSelectedTask(task)}
                       >
-                        {task.projectId && <span className="task-card-project">{getProjectName(task.projectId)}</span>}
-                        {task.priority && (
-                          <span className="task-priority-badge" style={{ background: PRIORITY_COLOR[task.priority] + '22', color: PRIORITY_COLOR[task.priority], border: `1px solid ${PRIORITY_COLOR[task.priority]}44` }}>
-                            {task.priority}
-                          </span>
+                        {(task.projectId || task.priority) && (
+                          <div className="task-card-top">
+                            {task.projectId && <span className="task-card-project">{getProjectName(task.projectId)}</span>}
+                            {task.priority && (
+                              <span className="task-priority-badge" style={{ background: PRIORITY_COLOR[task.priority] + '14', color: PRIORITY_COLOR[task.priority] }}>
+                                {task.priority}
+                              </span>
+                            )}
+                          </div>
                         )}
                         <h4 className="task-card-title">{task.title}</h4>
                         {task.description && (() => {
@@ -477,7 +481,7 @@ export default function TasksPage() {
                               </span>
                             )}
                             {(task.estimatedHours > 0 || task.actualHours > 0) && (
-                              <span className="task-card-hours">⏱ {task.actualHours || 0}/{task.estimatedHours || 0}h</span>
+                              <span className="task-card-hours">{task.actualHours || 0}/{task.estimatedHours || 0}h</span>
                             )}
                             {task.attachments?.length > 0 && (
                               <span className="task-card-attachments" title={`${task.attachments.length} attachment${task.attachments.length > 1 ? 's' : ''}`}>
@@ -569,7 +573,7 @@ export default function TasksPage() {
                         ) : 'Unassigned'}
                       </span>
                       <span className="list-item-hours" style={{ width: 80, textAlign: 'right' }}>
-                        {(task.estimatedHours > 0 || task.actualHours > 0) ? `⏱ ${task.actualHours || 0}/${task.estimatedHours || 0}h` : ''}
+                        {(task.estimatedHours > 0 || task.actualHours > 0) ? `${task.actualHours || 0}/${task.estimatedHours || 0}h` : ''}
                       </span>
                       <span className="list-item-date" style={{ width: 100, textAlign: 'right' }}>
                         {task.dueDate ? formatDate(task.dueDate) : ''}
