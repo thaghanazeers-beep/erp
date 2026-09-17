@@ -10,7 +10,7 @@ import TaskPanel from '../components/TaskPanel';
 import { tagColor } from '../components/taskUtils';
 import CalendarView from '../components/CalendarView';
 import TimelineView from '../components/TimelineView';
-import { AvatarStack } from '../components/Avatar';
+import Avatar, { AvatarStack } from '../components/Avatar';
 import './TasksPage.css';
 
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
@@ -544,13 +544,7 @@ export default function TasksPage() {
   };
   const formatShort = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
 
-  const renderAvatar = (name) => {
-    const member = teamMembers.find(m => m.name === name);
-    if (member?.profilePictureUrl) {
-      return <img src={member.profilePictureUrl} alt={name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />;
-    }
-    return name.charAt(0).toUpperCase();
-  };
+  const renderAvatar = (name) => <Avatar name={name} members={teamMembers} fill />;
 
   // Progress: subtasks done → hours used → a sensible status default
   const taskProgress = (t) => {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import Avatar from '../components/Avatar';
 import { getProjects, createProject, deleteProject, getTasks, createTask, updateTask, deleteTask, getTeam } from '../api';
 import { useTeamspace } from '../context/TeamspaceContext';
 import TaskDetailPage from './TaskDetailPage';
@@ -238,7 +239,7 @@ export default function ProjectsPage() {
                           </div>
                           {task.assignee && (
                             <span className="task-card-assignee">
-                              <div className="task-card-avatar">{task.assignee.charAt(0).toUpperCase()}</div>
+                              <div className="task-card-avatar"><Avatar name={task.assignee} members={teamMembers} fill /></div>
                             </span>
                           )}
                         </div>

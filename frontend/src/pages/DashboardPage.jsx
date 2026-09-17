@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Avatar from '../components/Avatar';
 import { getTasks, getSprints, getProjects, getTeam } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useTeamspace } from '../context/TeamspaceContext';
@@ -231,7 +232,7 @@ export default function DashboardPage() {
             <div className="perf-card animate-in" key={perf.name} style={{ animationDelay: `${i * 0.05}s` }}>
               <div className="perf-card-header">
                 <div className="perf-avatar">
-                  {perf.avatar ? <img src={perf.avatar} alt={perf.name} /> : perf.name.charAt(0).toUpperCase()}
+                  <Avatar name={perf.name} src={perf.avatar || ''} fill />
                 </div>
                 <div className="perf-user-info">
                   <h4>{perf.name}</h4>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Avatar from '../components/Avatar';
 import { getTeam, inviteUser, removeUser } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useOrg } from '../context/OrgContext';
@@ -99,7 +100,7 @@ export default function TeamSettingsPage() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>
-                          {m.name?.charAt(0)?.toUpperCase()}
+                          <Avatar name={m.name} src={m.profilePictureUrl || ''} fill />
                         </div>
                         <span style={{ fontWeight: 600 }}>{m.name}</span>
                       </div>

@@ -9,7 +9,11 @@
   flex-shrink: 0;
   box-shadow: 0 0 0 2px var(--bg-card);
   line-height: 1;
+  overflow: hidden;
+  vertical-align: middle;
 }
+.av-default svg { width: 62%; height: 62%; opacity: 0.95; }
+.av-fill { box-shadow: none; display: flex; }
 .av-stack { display: inline-flex; align-items: center; }
 .av-stack .av { margin-left: -7px; }
 .av-stack .av:first-child { margin-left: 0; }

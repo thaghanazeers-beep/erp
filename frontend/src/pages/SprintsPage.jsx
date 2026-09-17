@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Avatar from '../components/Avatar';
 import {
   getSprints, createSprint, updateSprint, deleteSprint,
   startSprint, completeSprint, getSprint,
@@ -249,13 +250,7 @@ export default function SprintsPage() {
     return acc;
   }, {});
 
-  const renderAvatar = (name) => {
-    const member = teamMembers.find(m => m.name === name);
-    if (member?.profilePictureUrl) {
-      return <img src={member.profilePictureUrl} alt={name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />;
-    }
-    return name?.charAt(0).toUpperCase() || '?';
-  };
+  const renderAvatar = (name) => <Avatar name={name} members={teamMembers} fill />;
 
   if (loading) {
     return <div className="sprint-loading"><div className="spinner" style={{ width: 32, height: 32 }} /></div>;

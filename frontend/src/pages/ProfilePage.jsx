@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 import { uploadAvatar, updateUser } from '../api';
 import './ProfilePage.css';
@@ -42,11 +43,7 @@ export default function ProfilePage() {
         <div className="profile-header-section">
           <div className="profile-avatar-col">
           <div className="profile-avatar-lg" onClick={() => fileRef.current?.click()} style={{ cursor: 'pointer', position: 'relative' }} title="Click to change photo">
-            {user?.profilePictureUrl ? (
-              <img src={user.profilePictureUrl} alt={user.name} />
-            ) : (
-              <span>{user?.name?.charAt(0)?.toUpperCase()}</span>
-            )}
+            <Avatar name={user?.name} src={user?.profilePictureUrl || ''} fill />
             <div className="avatar-overlay">
               {uploading ? (
                 <div className="spinner" style={{ width: 20, height: 20 }} />

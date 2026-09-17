@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import Avatar from '../components/Avatar';
 import { getTeam, inviteUser, removeUser, updateUser, uploadAvatar, getMergeCandidates, mergeUsers } from '../api';
 import { useAuth } from '../context/AuthContext';
 import ViewTabs from '../components/ViewTabs';
@@ -248,11 +249,7 @@ export default function TeamPage() {
             <div className="team-card animate-in" key={member._id} style={{ animationDelay: `${i * 0.05}s` }}>
               <div className="team-card-top">
                 <div className="team-avatar">
-                  {member.profilePictureUrl ? (
-                    <img src={member.profilePictureUrl} alt={member.name} />
-                  ) : (
-                    <span>{member.name?.charAt(0)?.toUpperCase()}</span>
-                  )}
+                  <Avatar name={member.name} src={member.profilePictureUrl || ''} fill />
                 </div>
                 {isAdmin && (
                   <div className="team-card-actions">
@@ -284,7 +281,7 @@ export default function TeamPage() {
             <div className="list-item animate-in" key={member._id} style={{ animationDelay: `${i * 0.03}s` }}>
               <div className="list-item-left" style={{ gap: 12 }}>
                 <div className="team-avatar" style={{ width: 32, height: 32, fontSize: 13, flexShrink: 0 }}>
-                  {member.profilePictureUrl ? <img src={member.profilePictureUrl} alt={member.name} /> : <span>{member.name?.charAt(0)?.toUpperCase()}</span>}
+                  <Avatar name={member.name} src={member.profilePictureUrl || ''} fill />
                 </div>
                 <span className="list-item-title">{member.name}</span>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{member.email}</span>
@@ -316,7 +313,7 @@ export default function TeamPage() {
                 <tr key={member._id} className="animate-in" style={{ animationDelay: `${i * 0.03}s` }}>
                   <td style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div className="team-avatar" style={{ width: 28, height: 28, fontSize: 11, flexShrink: 0 }}>
-                      {member.profilePictureUrl ? <img src={member.profilePictureUrl} alt={member.name} /> : <span>{member.name?.charAt(0)?.toUpperCase()}</span>}
+                      <Avatar name={member.name} src={member.profilePictureUrl || ''} fill />
                     </div>
                     {member.name}
                   </td>
@@ -430,11 +427,7 @@ export default function TeamPage() {
               {/* Avatar section */}
               <div className="edit-avatar-section">
                 <div className="edit-avatar-preview">
-                  {editMember.profilePictureUrl ? (
-                    <img src={editMember.profilePictureUrl} alt={editMember.name} />
-                  ) : (
-                    <span>{editMember.name?.charAt(0)?.toUpperCase()}</span>
-                  )}
+                  <Avatar name={editMember.name} src={editMember.profilePictureUrl || ''} fill />
                 </div>
                 <div className="edit-avatar-actions">
                   <p className="edit-avatar-name">{editMember.name}</p>

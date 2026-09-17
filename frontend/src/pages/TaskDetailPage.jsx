@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import Avatar from '../components/Avatar';
 import { updateTask, getTeam, createTask, deleteTask, getTasks, getProjects, getSprints, uploadTaskAttachments, downloadAttachmentBlob } from '../api';
 import { useAuth } from '../context/AuthContext';
 import FileTypeIcon from '../components/FileTypeIcon';
@@ -349,7 +350,7 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
           <div className="td-prop"><label className="td-prop-label">Assignee</label>
             <div className="td-assignee-wrapper">
               <button className="td-assignee-btn" onClick={() => setShowAssigneeDropdown(!showAssigneeDropdown)}>
-                {assignee ? (<div className="td-assignee-selected"><div className="td-assignee-avatar-sm">{assignee.charAt(0).toUpperCase()}</div><span>{assignee}</span></div>) : (<span className="td-assignee-placeholder">Select assignee...</span>)}
+                {assignee ? (<div className="td-assignee-selected"><div className="td-assignee-avatar-sm"><Avatar name={assignee} members={teamMembers} fill /></div><span>{assignee}</span></div>) : (<span className="td-assignee-placeholder">Select assignee...</span>)}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6,9 12,15 18,9"/></svg>
               </button>
               {showAssigneeDropdown && (
@@ -357,7 +358,7 @@ export default function TaskDetailPage({ task, onBack, onUpdated }) {
                   {assignee && <button className="td-assignee-option" onClick={() => { setAssignee(''); setShowAssigneeDropdown(false); autoSave({ assignee: '' }); }}><span className="td-assignee-none">✕</span><span>Unassigned</span></button>}
                   {teamMembers.map(m => (
                     <button className="td-assignee-option" key={m._id} onClick={() => handleAssigneeChange(m)}>
-                      <div className="td-assignee-avatar-sm">{m.profilePictureUrl ? <img src={m.profilePictureUrl} alt="" /> : m.name?.charAt(0)?.toUpperCase()}</div>
+                      <div className="td-assignee-avatar-sm"><Avatar name={m.name} src={m.profilePictureUrl || ''} fill /></div>
                       <div className="td-assignee-option-info"><span className="td-assignee-option-name">{m.name}</span><span className="td-assignee-option-email">{m.email}</span></div>
                     </button>
                   ))}

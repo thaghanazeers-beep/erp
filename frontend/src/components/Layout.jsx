@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import Avatar from './Avatar';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useTeamspace } from '../context/TeamspaceContext';
@@ -254,7 +255,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
             <span className="header-user-name">{user?.name}</span>
             <span className={`badge ${user?.role === 'Admin' ? 'badge-admin' : 'badge-member'}`}>{user?.role}</span>
             <div className="header-avatar" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-              {user?.profilePictureUrl ? <img src={user.profilePictureUrl} alt={user.name} /> : <span>{user?.name?.charAt(0)?.toUpperCase()}</span>}
+              <Avatar name={user?.name} src={user?.profilePictureUrl || ''} fill />
             </div>
           </div>
         </header>

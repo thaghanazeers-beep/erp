@@ -276,7 +276,7 @@ app.post('/api/auth/microsoft', authLimiter, async (req, res) => {
         email,
         azureOid: claims.oid,
         role: adminEmails.includes(email) ? 'Admin' : 'Member',
-        profilePictureUrl: `https://i.pravatar.cc/150?u=${encodeURIComponent(email)}`,
+        // no placeholder photo — the app shows its default avatar until the user uploads one
       });
     } else {
       if (user.active === false) return res.status(403).json({ message: 'This account has been deactivated.' });
@@ -413,7 +413,7 @@ app.post('/api/team/invite', requireAdmin, async (req, res) => {
       name,
       email,
       role,
-      profilePictureUrl: `https://i.pravatar.cc/150?u=${encodeURIComponent(email)}`,
+      // no placeholder photo — the app shows its default avatar until the user uploads one
     });
     await user.save();
 
