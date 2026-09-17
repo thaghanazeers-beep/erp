@@ -304,3 +304,7 @@
   box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
+
+/* external link marker on sidebar items (ERP portal) */
+a.sidebar-link { text-decoration: none; }
+.sidebar-ext { margin-left: auto; color: var(--text-muted); opacity: 0.7; }
