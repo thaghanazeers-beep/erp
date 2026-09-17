@@ -204,8 +204,11 @@ async function getAttachmentFile(key) {
   const contentType = upstream.headers.get('content-type') || ATTACHMENT_MIME[path.extname(key).toLowerCase()];
   const contentLength = Number(upstream.headers.get('content-length')) || undefined;
 
-  if (fileStore.isConfigured() && contentLength && contentLength <= 25 * 1024 * 1024) {
-    // Durable storage available: keep a copy so this is a one-time fetch.
+  // Write-back is opt-in: with 625 MB of Notion files, silently copying them into
+  // a small backend (e.g. GridFS on a 512 MB Atlas tier) could exhaust it and
+  // block all writes. Notion remains the source of truth unless explicitly enabled.
+  const writeBack = process.env.ATTACHMENT_WRITEBACK === 'true' && fileStore.isConfigured();
+  if (writeBack && contentLength && contentLength <= 25 * 1024 * 1024) {
     const buffer = Buffer.from(await upstream.arrayBuffer());
     try { await fileStore.putFile(`attachments/${key}`, buffer, contentType); }
     catch (err) { console.warn(`Write-back to storage failed for ${key}: ${err.message}`); }
