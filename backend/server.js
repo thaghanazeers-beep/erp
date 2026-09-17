@@ -1524,7 +1524,11 @@ if (fs.existsSync(path.join(distDir, 'index.html'))) {
   };
   app.use(express.static(distDir, { maxAge: '1h', index: 'index.html', setHeaders: spaCacheHeaders }));
   // SPA fallback for anything that isn't API/uploads/health
-  app.get(/^(?!\/api\/|\/uploads\/|\/healthz).*/, (req, res) => {
+  // Only real page routes fall back to the shell. Built assets and file routes
+  // must 404 when missing — answering them with index.html (HTTP 200) makes a
+  // stale/absent bundle look "deployed" and turns a missing script into a
+  // white screen instead of an obvious error.
+  app.get(/^(?!\/api\/|\/uploads\/|\/healthz|\/assets\/|\/files\/).*/, (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(distDir, 'index.html'));
   });
