@@ -87,12 +87,15 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
     { id: 'teamspace-control', label: 'Teamspace Control', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> },
   ];
 
-  // Personal teamspace only gets basic items (no team mgmt)
+  // Personal teamspace: basic items plus Team Members — the member list (and the
+  // Admin-only Merge / Invite actions on it) is organisation-wide, not per
+  // teamspace, so it must stay reachable from here too.
   const personalChildItems = [
     tsChildItems[0], // Sprints
     tsChildItems[1], // Projects
     tsChildItems[2], // Tasks
     tsChildItems[3], // Workflows
+    tsChildItems[4], // Team Members
   ];
 
   const PERSONAL_TS_ID = '__personal__';
