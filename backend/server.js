@@ -1511,9 +1511,21 @@ app.get('/api/orgchart/hierarchy/:memberId', async (req, res) => {
 // so erp.mayvel.ai is one service: / -> app, /api -> API, /uploads -> files.
 const distDir = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(path.join(distDir, 'index.html'))) {
-  app.use(express.static(distDir, { maxAge: '1h', index: 'index.html' }));
+  // Cache policy: Vite's hashed /assets are immutable, so cache them for a year;
+  // the HTML shell must NEVER be cached — otherwise an edge/proxy (Hostinger's
+  // LiteSpeed honoured the old 1h max-age) keeps serving stale bundle references
+  // for up to an hour after every deploy.
+  const spaCacheHeaders = (res, filePath) => {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  };
+  app.use(express.static(distDir, { maxAge: '1h', index: 'index.html', setHeaders: spaCacheHeaders }));
   // SPA fallback for anything that isn't API/uploads/health
   app.get(/^(?!\/api\/|\/uploads\/|\/healthz).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(distDir, 'index.html'));
   });
   console.log('Serving frontend from', distDir);

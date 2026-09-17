@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import MayvelLogo from '../components/MayvelLogo';
 import { loginWithMicrosoft } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { msalConfigured, startMicrosoftSignIn, completeMicrosoftSignIn } from '../msal';
@@ -53,13 +54,7 @@ export default function AuthPage() {
 
       <div className="auth-card animate-in">
         <div className="auth-logo">
-          <div className="auth-logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M3 15 L8 8 L12 13 L16 8 L21 13" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="21" cy="7.5" r="1.6" fill="currentColor"/>
-            </svg>
-          </div>
-          <h1>Mayvel Task</h1>
+          <MayvelLogo height={76} />
         </div>
 
         <p className="auth-subtitle">Sign in with your Mayvel Microsoft account</p>

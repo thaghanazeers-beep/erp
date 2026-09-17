@@ -31,8 +31,9 @@
 .auth-logo {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+  justify-content: center;
+  margin: 4px 0 18px;
+  color: var(--text); /* wordmark inherits this */
 }
 
 .auth-logo-icon {

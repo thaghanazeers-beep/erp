@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import NotificationBell from './NotificationBell';
+import MayvelLogo from './MayvelLogo';
 import { getTeamspaces, createTeamspace } from '../api';
 import './Layout.css';
 
@@ -115,10 +116,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
       <aside className="sidebar">
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 15 L8 8 L12 13 L16 8 L21 13" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/><circle cx="21" cy="7.5" r="1.6" fill="currentColor"/></svg>
-          </div>
-          <span className="sidebar-title">Mayvel</span>
+          <MayvelLogo height={44} />
         </div>
 
         <nav className="sidebar-nav">
