@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import TaskDetailPage from './TaskDetailPage';
 import ViewTabs from '../components/ViewTabs';
-import FileTypeIcon from '../components/FileTypeIcon';
 import TaskTable from '../components/TaskTable';
 import TaskPanel from '../components/TaskPanel';
 import { tagColor } from '../components/taskUtils';
@@ -122,6 +121,7 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState(null); // opens the slide-over panel
   const [fullTask, setFullTask] = useState(null);         // opens the full-page editor
   const [colMenu, setColMenu] = useState(null);           // kanban column "⋮" menu
+  const [lvCollapsed, setLvCollapsed] = useState({});    // list view: collapsed status groups
   const [teamMembers, setTeamMembers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sprints, setSprints] = useState([]);
@@ -947,83 +947,97 @@ export default function TasksPage() {
 
         {/* ─── List ─── */}
         {viewType === 'list' && (
-          <div className="list-view">
-            {/* Bulk Action Bar */}
-            {selectedTasksIds.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 16 }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedTasksIds.length} tasks selected</span>
-                <div style={{ flex: 1 }} />
-                <select
-                  className="input"
-                  style={{ width: 200, padding: '6px 12px', fontSize: '0.8rem' }}
-                  onChange={e => handleBulkChangeSprint(e.target.value)}
-                  value=""
-                >
-                  <option value="" disabled>Change Sprint...</option>
-                  <option value="None">None</option>
-                  {sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                </select>
-                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedTasksIds([])}>Cancel</button>
-              </div>
-            )}
-
-            {filteredTasks.length === 0 ? (
-              <div className="empty-state"><p>No tasks match your filters.</p></div>
-            ) : (
-              <>
-                {/* Table Header */}
-                <div className="list-item" style={{ background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  <div className="list-item-left" style={{ gap: 16 }}>
-                    <input type="checkbox" onChange={handleSelectAll} checked={selectedTasksIds.length === filteredTasks.length && filteredTasks.length > 0} />
-                    <span className="list-item-title" style={{ color: 'var(--text-muted)' }}>Task Name</span>
-                  </div>
-                  <div className="list-item-right" style={{ paddingRight: 16 }}>
-                    <span style={{ width: 120 }}>Assignee</span>
-                    <span style={{ width: 80, textAlign: 'right' }}>Time</span>
-                    <span style={{ width: 100, textAlign: 'right' }}>Due Date</span>
-                    <span style={{ width: 100, textAlign: 'right' }}>Status</span>
-                  </div>
+          <div className="lv">
+            <div className="lv-toolbar">
+              <label className="lv-selectall">
+                <input type="checkbox" onChange={handleSelectAll} checked={selectedTasksIds.length === filteredTasks.length && filteredTasks.length > 0} />
+                <span>{selectedTasksIds.length > 0 ? `${selectedTasksIds.length} selected` : `${filteredTasks.length} tasks`}</span>
+              </label>
+              {selectedTasksIds.length > 0 && (
+                <div className="lv-bulk">
+                  <select className="fr-select" defaultValue="" onChange={(e) => { if (e.target.value !== '') { handleBulkChangeSprint(e.target.value); e.target.value = ''; } }}>
+                    <option value="" disabled>Move to sprint…</option>
+                    <option value="None">No sprint</option>
+                    {sprints.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                  <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>Delete</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setSelectedTasksIds([])}>Clear</button>
                 </div>
+              )}
+            </div>
 
-                {filteredTasks.map((task, i) => {
-                  const taskId = task.id || task._id;
-                  return (
-                  <div className="list-item animate-in" key={taskId} style={{ animationDelay: `${i * 0.03}s` }} onClick={() => setSelectedTask(task)}>
-                    <div className="list-item-left" style={{ gap: 16 }}>
-                      <input type="checkbox" onClick={e => e.stopPropagation()} onChange={e => handleSelectTask(e, taskId)} checked={selectedTasksIds.includes(taskId)} />
-                      <div className={`list-dot ${STATUS_DOT[task.status] || 'dot-notstarted'}`} style={{ marginLeft: 0 }} />
-                      <span className="list-item-title">{task.title}</span>
-                      {task.projectId && <span className="list-item-project">{getProjectName(task.projectId)}</span>}
-                      {task.attachments?.length > 0 && (
-                        <span className="list-item-attachments" title={`${task.attachments.length} attachment${task.attachments.length > 1 ? 's' : ''}`}>
-                          <FileTypeIcon name={task.attachments[0].name} size={14} />
-                          {task.attachments.length > 1 && task.attachments.length}
+            {filteredTasks.length === 0 && <div className="empty-state"><p>No tasks match your filters.</p></div>}
+
+            {STATUSES.map(status => {
+              const rows = getTasksByStatus(status);
+              if (!rows.length) return null;
+              const open = !lvCollapsed[status];
+              return (
+                <section className="lv-group" key={status}>
+                  <button className="lv-group-head" onClick={() => setLvCollapsed(p => ({ ...p, [status]: !p[status] }))}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .12s' }}><polyline points="9 6 15 12 9 18"/></svg>
+                    <span className="lv-dot" style={{ background: STATUS_COLOR[status] }} />
+                    <h3>{COLUMN_LABEL[status]}</h3>
+                    <span className="lv-count">{rows.length}</span>
+                    <span className="lv-group-add" role="button" title="Add task here" onClick={(e) => { e.stopPropagation(); handleCreateNew(status); }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </span>
+                  </button>
+
+                  {open && rows.map((task, i) => {
+                    const taskId = task.id || task._id;
+                    const pct = taskProgress(task);
+                    const overdue = task.dueDate && task.status !== 'Completed' && new Date(task.dueDate) < new Date(new Date().toDateString());
+                    const preview = descText(task);
+                    const pc = PRIORITY_COLOR[task.priority];
+                    return (
+                      <div className={`lv-row animate-in ${selectedTasksIds.includes(taskId) ? 'selected' : ''}`} key={taskId}
+                        style={{ animationDelay: `${Math.min(i, 12) * 0.02}s` }} onClick={() => setSelectedTask(task)}>
+                        <input type="checkbox" className="lv-check" onClick={e => e.stopPropagation()} onChange={e => handleSelectTask(e, taskId)} checked={selectedTasksIds.includes(taskId)} />
+                        <span className="lv-prio" style={{ background: pc || 'var(--border)' }} title={task.priority ? `${task.priority} priority` : 'No priority'} />
+                        <div className="lv-main">
+                          <div className="lv-title-row">
+                            <span className="lv-id">{shortId(task)}</span>
+                            <span className="lv-title">{task.title}</span>
+                            {task.taskType?.slice(0, 2).map(t => { const [bg, fg] = tagColor(t); return <span key={t} className="lv-tag" style={{ background: bg, color: fg }}>{t}</span>; })}
+                            {task.taskType?.length > 2 && <span className="lv-more">+{task.taskType.length - 2}</span>}
+                          </div>
+                          {(task.projectId || preview) && (
+                            <div className="lv-sub">
+                              {task.projectId && <span className="lv-project">{getProjectName(task.projectId)}</span>}
+                              {task.projectId && preview && <span className="lv-sep">·</span>}
+                              {preview && <span className="lv-preview">{preview}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="lv-progress" title={`${pct}% complete`}>
+                          <span className="lv-bar"><i style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--accent-green)' : 'var(--primary)' }} /></span>
+                          <span className="lv-pct">{pct}%</span>
+                        </div>
+                        <span className={`lv-due ${overdue ? 'overdue' : ''} ${task.dueDate ? '' : 'empty'}`}>
+                          {task.dueDate ? (
+                            <>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                              {formatShort(task.dueDate)}
+                            </>
+                          ) : '—'}
                         </span>
-                      )}
-                    </div>
-                    <div className="list-item-right">
-                      <span className="list-item-assignee" style={{ width: 120 }}>
-                        {task.assignee ? (
-                          <>
-                            <div className="task-card-avatar" style={{width: 20, height: 20, fontSize: 10, marginRight: 6, display: 'inline-flex', verticalAlign: 'middle'}}>{renderAvatar(task.assignee)}</div>
-                            {task.assignee}
-                          </>
-                        ) : 'Unassigned'}
-                      </span>
-                      <span className="list-item-hours" style={{ width: 80, textAlign: 'right' }}>
-                        {(task.estimatedHours > 0 || task.actualHours > 0) ? `${task.actualHours || 0}/${task.estimatedHours || 0}h` : ''}
-                      </span>
-                      <span className="list-item-date" style={{ width: 100, textAlign: 'right' }}>
-                        {task.dueDate ? formatDate(task.dueDate) : ''}
-                      </span>
-                      <span style={{ width: 100, textAlign: 'right' }}>
-                        <span className={`badge ${STATUS_BADGE[task.status] || 'badge-notstarted'}`}>{task.status}</span>
-                      </span>
-                    </div>
-                  </div>
-                )})}
-              </>
-            )}
+                        <span className="lv-counts">
+                          <span title="Comments"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>{task.comments?.length || 0}</span>
+                          <span title="Attachments"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>{task.attachments?.length || 0}</span>
+                        </span>
+                        <span className="lv-who" title={task.assignee || 'Unassigned'}>
+                          {task.assignee ? <Avatar name={task.assignee} members={teamMembers} size={24} /> : <span className="lv-who-blank" />}
+                        </span>
+                        <span className={`badge lv-status ${STATUS_BADGE[task.status] || 'badge-notstarted'}`}>
+                          <span className={`lv-status-dot ${STATUS_DOT[task.status] || 'dot-notstarted'}`} />{task.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </section>
+              );
+            })}
           </div>
         )}
 

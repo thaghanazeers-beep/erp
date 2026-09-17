@@ -301,25 +301,78 @@
 .kb-counts span { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 
 /* ======================== LIST VIEW ======================== */
-.list-view { display: flex; flex-direction: column; gap: 6px; }
-.list-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 9px 14px; background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius-md); cursor: pointer;
-  transition: background var(--transition), border-color var(--transition);
+.lv { display: flex; flex-direction: column; gap: 12px; }
+.lv-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 2px 4px; }
+.lv-selectall { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer; }
+.lv-selectall input { accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer; }
+.lv-bulk { display: flex; align-items: center; gap: 8px; animation: fadeIn 0.12s ease; }
+.lv-bulk .fr-select { max-width: 200px; }
+
+.lv-group { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); overflow: hidden; }
+.lv-group-head {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px 14px;
+  background: var(--bg-surface); border: none; border-bottom: 1px solid var(--border);
+  font-family: inherit; color: var(--text-secondary); cursor: pointer; text-align: left;
 }
-.list-item:hover { border-color: var(--border-light); background: var(--bg-hover); }
-.list-item-left { display: flex; align-items: center; gap: 12px; }
-.list-dot { width: 8px; height: 8px; border-radius: 50%; }
-.list-item-title { font-size: 0.9rem; font-weight: 500; }
-.list-item-right { display: flex; align-items: center; gap: 12px; }
-.list-item-date { font-size: 0.8rem; color: var(--text-muted); }
-.list-item-attachments { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--text-muted); }
-.list-item-assignee { font-size: 0.8rem; color: var(--text-secondary); }
+.lv-group-head:hover { background: var(--bg-hover); }
+.lv-group-head h3 { font-size: 0.86rem; font-weight: 600; color: var(--text); margin: 0; }
+.lv-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.lv-count { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-active); padding: 1px 7px; border-radius: 6px; }
+.lv-group-add { margin-left: auto; width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); opacity: 0; transition: opacity var(--transition), background var(--transition); }
+.lv-group-head:hover .lv-group-add { opacity: 1; }
+.lv-group-add:hover { background: var(--bg-active); color: var(--text); }
+
+.lv-row {
+  display: grid;
+  grid-template-columns: 18px 3px minmax(0, 1fr) 132px 96px 76px 28px 128px;
+  align-items: center; gap: 12px;
+  padding: 9px 14px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background var(--transition);
+}
+.lv-row:last-child { border-bottom: none; }
+.lv-row:hover { background: var(--bg-hover); }
+.lv-row.selected { background: var(--primary-tint); }
+.lv-check { accent-color: var(--primary); width: 14px; height: 14px; cursor: pointer; opacity: 0; transition: opacity var(--transition); margin: 0; }
+.lv-row:hover .lv-check, .lv-check:checked, .lv-row.selected .lv-check { opacity: 1; }
+.lv-prio { width: 3px; height: 26px; border-radius: 2px; }
+.lv-main { min-width: 0; }
+.lv-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.lv-id { font-size: 0.7rem; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.lv-title { font-size: 0.9rem; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lv-tag { font-size: 0.68rem; font-weight: 600; padding: 1px 7px; border-radius: 5px; white-space: nowrap; flex-shrink: 0; }
+.lv-more { font-size: 0.7rem; color: var(--text-muted); flex-shrink: 0; }
+.lv-sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 0.76rem; color: var(--text-secondary); min-width: 0; }
+.lv-project { color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; }
+.lv-sep { color: var(--text-muted); }
+.lv-preview { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lv-progress { display: flex; align-items: center; gap: 8px; }
+.lv-bar { flex: 1; height: 5px; background: var(--bg-active); border-radius: 100px; overflow: hidden; }
+.lv-bar i { display: block; height: 100%; border-radius: 100px; transition: width 0.3s ease; }
+.lv-pct { font-size: 0.72rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; width: 34px; text-align: right; }
+.lv-due { display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; color: var(--text-secondary); white-space: nowrap; }
+.lv-due.overdue { color: var(--accent-red); font-weight: 600; }
+.lv-due.empty { color: var(--text-muted); }
+.lv-counts { display: flex; gap: 10px; font-size: 0.74rem; color: var(--text-secondary); }
+.lv-counts span { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.lv-who { display: inline-flex; align-items: center; justify-content: center; }
+.lv-who-blank { width: 24px; height: 24px; border-radius: 50%; border: 1px dashed var(--border-light); }
+.lv-status { display: inline-flex; align-items: center; gap: 6px; justify-self: end; font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+.lv-status-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+/* still used by other pages (project cards, sprints) */
 .task-card-avatar {
   width: 18px; height: 18px; border-radius: 50%; background: var(--primary);
   display: flex; align-items: center; justify-content: center;
   font-size: 0.58rem; font-weight: 600; color: white; flex-shrink: 0; overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+  .lv-row { grid-template-columns: 18px 3px minmax(0, 1fr) 96px 28px 120px; }
+  .lv-progress, .lv-counts { display: none; }
+}
+@media (max-width: 640px) {
+  .lv-row { grid-template-columns: 18px 3px minmax(0, 1fr) 28px; }
+  .lv-due, .lv-status { display: none; }
 }
 
 /* ======================== EMPTY STATE ======================== */
