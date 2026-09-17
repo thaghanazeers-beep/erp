@@ -21,6 +21,15 @@ const attachmentSchema = new mongoose.Schema({
   notionBlockId: String, // set on Notion-imported files, so re-imports skip them
 });
 
+// Discussion thread on a task. Reactions are emoji -> the user names who reacted.
+const commentSchema = new mongoose.Schema({
+  id:        String,
+  author:    String,
+  text:      String,
+  createdAt: { type: Date, default: Date.now },
+  reactions: [{ emoji: String, users: [String] }],
+});
+
 const taskSchema = new mongoose.Schema({
   id:             { type: String, required: true, unique: true },
   notionId:       { type: String },
@@ -42,7 +51,8 @@ const taskSchema = new mongoose.Schema({
   notionSprintId: { type: String },
   estimatedHours: { type: Number, default: 0 },
   actualHours:    { type: Number, default: 0 },
-  taskType:       { type: [String], default: [] },
+  taskType:       { type: [String], default: [] }, // doubles as the task's tags
+  comments:       [commentSchema],
   updatedBy:      { type: String },
   teamspaceId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Teamspace' },
   // child tasks are fetched by finding tasks with `parentId` === this task's id

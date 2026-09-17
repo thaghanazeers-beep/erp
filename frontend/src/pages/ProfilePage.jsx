@@ -8,16 +8,22 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [editName, setEditName] = useState(false);
   const [name, setName] = useState(user?.name || '');
+  const [uploadError, setUploadError] = useState('');
   const fileRef = useRef(null);
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // allow picking the same file again
     if (!file) return;
     setUploading(true);
+    setUploadError('');
     try {
       const res = await uploadAvatar(user._id, file);
       loginUser({ ...user, profilePictureUrl: res.data.profilePictureUrl });
-    } catch (err) { console.error('Upload failed:', err); }
+    } catch (err) {
+      console.error('Upload failed:', err);
+      setUploadError(err.response?.data?.message || 'Upload failed — use a JPG, PNG, WebP or GIF under 5 MB.');
+    }
     finally { setUploading(false); }
   };
 
@@ -34,7 +40,8 @@ export default function ProfilePage() {
     <div className="profile-page">
       <div className="profile-card animate-in">
         <div className="profile-header-section">
-          <div className="profile-avatar-lg" onClick={() => fileRef.current?.click()} style={{ cursor: 'pointer', position: 'relative' }}>
+          <div className="profile-avatar-col">
+          <div className="profile-avatar-lg" onClick={() => fileRef.current?.click()} style={{ cursor: 'pointer', position: 'relative' }} title="Click to change photo">
             {user?.profilePictureUrl ? (
               <img src={user.profilePictureUrl} alt={user.name} />
             ) : (
@@ -51,6 +58,11 @@ export default function ProfilePage() {
               )}
             </div>
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleAvatarUpload} />
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? 'Uploading…' : (user?.profilePictureUrl ? 'Change photo' : 'Upload photo')}
+          </button>
+          {uploadError && <span className="profile-upload-error">{uploadError}</span>}
           </div>
           <div className="profile-info">
             {editName ? (

@@ -11,6 +11,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env'), qui
 const { Client } = require('@notionhq/client');
 const mongoose = require('mongoose');
 const { Task } = require('../models/Task');
+const User = require('../models/User');
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const TASKS_DB     = process.env.NOTION_TASKS_DB;
@@ -78,6 +79,15 @@ async function main() {
   await mongoose.connect(MONGO_URI);
   console.log('✅ Connected\n');
 
+  // Names merged into an app account (User.aliases) keep resolving to that
+  // account, so a merge done in the app is not undone by the next sync.
+  const aliasMap = new Map();
+  for (const u of await User.find({ aliases: { $exists: true, $ne: [] } }, 'name aliases')) {
+    for (const a of u.aliases) aliasMap.set(String(a).trim().toLowerCase(), u.name);
+  }
+  const resolveName = (n) => aliasMap.get(String(n || '').trim().toLowerCase()) || n;
+  if (aliasMap.size) console.log(`🔗 ${aliasMap.size} merged name(s) will map to their app accounts\n`);
+
   console.log('📥 Fetching tasks from Notion...');
   const notionTasks = await fetchAll(TASKS_DB);
 
@@ -113,7 +123,7 @@ async function main() {
         title,
         status:         mapStatus(rawStatus),
         priority:       extractProp(p['Priority']) || '',
-        assignee:       typeof assigneeRaw === 'string' ? assigneeRaw.split(',')[0].trim() : '',
+        assignee:       typeof assigneeRaw === 'string' ? resolveName(assigneeRaw.split(',')[0].trim()) : '',
         startDate:      startDate ? new Date(startDate) : null,
         dueDate:        endDate ? new Date(endDate) : null,
         estimatedHours: estHours ? Number(estHours) : 0,

@@ -8,6 +8,10 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['Admin', 'Team Owner', 'Member'], default: 'Member' },
   active: { type: Boolean, default: true }, // deactivate instead of hard-delete
   profilePictureUrl: { type: String },
+  // Other names this person appears under (e.g. Notion "people" display names).
+  // Merging a name into this account records it here so every Notion re-sync
+  // keeps mapping that name to this account instead of undoing the merge.
+  aliases: { type: [String], default: [] },
   lastLoginAt: { type: Date },
 }, { timestamps: true });
 

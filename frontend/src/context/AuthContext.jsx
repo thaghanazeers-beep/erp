@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { getMe } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -25,6 +26,16 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('mayvel_token');
     }
   }, [user]);
+
+  // Refresh the cached profile from the server once per load, so name / role /
+  // avatar changes made elsewhere (or by an admin) show up without re-login.
+  // A 401 here is handled by the API interceptor (clears the session).
+  useEffect(() => {
+    if (!localStorage.getItem('mayvel_token')) return;
+    getMe()
+      .then(res => { if (res?.data?._id) setUser(prev => (prev ? { ...prev, ...res.data } : prev)); })
+      .catch(() => {});
+  }, []);
 
   /** loginUser(userData, token) — token optional when only refreshing profile data. */
   const loginUser = (userData, token) => {

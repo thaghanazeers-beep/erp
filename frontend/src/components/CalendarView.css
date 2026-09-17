@@ -1,0 +1,19 @@
+.cal { display: flex; flex-direction: column; gap: 10px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cal-title { font-size: 1rem; font-weight: 600; color: var(--text); }
+.cal-nav { display: flex; gap: 4px; align-items: center; }
+.cal-nodate { font-size: 0.76rem; color: var(--text-muted); margin-right: 8px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-card); }
+.cal-dow { padding: 8px 10px; font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); background: var(--bg-surface); }
+.cal-day { min-height: 108px; padding: 6px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-day:nth-child(7n + 7) { border-right: none; }
+.cal-day.other { background: var(--bg-surface); }
+.cal-day.other .cal-num { color: var(--text-muted); }
+.cal-num { font-size: 0.76rem; font-weight: 600; color: var(--text-secondary); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+.cal-day.today .cal-num { background: var(--primary); color: #fff; }
+.cal-chip { display: flex; align-items: center; gap: 5px; font: inherit; font-size: 0.74rem; padding: 2px 6px; border-radius: 5px; background: var(--bg-hover); color: var(--text); cursor: pointer; border: none; text-align: left; overflow: hidden; width: 100%; }
+.cal-chip:hover { background: var(--bg-active); }
+.cal-chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.cal-chip .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-more { font: inherit; font-size: 0.7rem; color: var(--primary); background: none; border: none; cursor: pointer; text-align: left; padding: 1px 6px; }
+@media (max-width: 900px) { .cal-day { min-height: 76px; } }

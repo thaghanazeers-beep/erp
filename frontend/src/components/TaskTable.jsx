@@ -1,5 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import Avatar from './Avatar';
+import { tagColor } from './taskUtils';
 import './TaskTable.css';
+
+const STATUS_DOT = {
+  'Not Yet Started': 'dot-notstarted', 'In Progress': 'dot-progress', 'In Review': 'dot-review', 'Completed': 'dot-done', 'Rejected': 'dot-rejected',
+};
+const STATUS_BADGE = {
+  'Not Yet Started': 'badge-notstarted', 'In Progress': 'badge-progress', 'In Review': 'badge-review', 'Completed': 'badge-done', 'Rejected': 'badge-rejected',
+};
 
 /**
  * Notion-style task table: per-column header menus (sort / filter / hide),
@@ -10,13 +19,15 @@ import './TaskTable.css';
 const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
 
 const COLUMNS = [
-  { key: 'title',          label: 'Task name',   always: true,        width: 280 },
-  { key: 'project',        label: 'Project',     filterKey: 'project' },
-  { key: 'priority',       label: 'Priority',    filterKey: 'priority' },
+  { key: 'title',          label: 'Task name',   always: true,        width: 300 },
   { key: 'status',         label: 'Status',      filterKey: 'status' },
-  { key: 'sprint',         label: 'Sprint',      filterKey: 'sprint' },
+  { key: 'priority',       label: 'Priority',    filterKey: 'priority' },
   { key: 'assignee',       label: 'Assignee',    filterKey: 'assignee' },
+  { key: 'tags',           label: 'Tags' },
   { key: 'dueDate',        label: 'Due date' },
+  { key: 'progress',       label: 'Progress' },
+  { key: 'project',        label: 'Project',     filterKey: 'project' },
+  { key: 'sprint',         label: 'Sprint',      filterKey: 'sprint' },
   { key: 'estimatedHours', label: 'Est. hours' },
   { key: 'actualHours',    label: 'Actual hours' },
   { key: 'createdDate',    label: 'Created' },
@@ -84,7 +95,8 @@ export default function TaskTable({
   canEditTask, canChangeStatusTo,
   onStatusChange, onInlineUpdate, onDelete, onOpen,
   onFilter, // (filterKey, value) -> applies a page-level filter
-  formatDate, renderAvatar,
+  formatDate,
+  taskProgress = () => 0, // (task) -> 0..100; subtask-aware when the parent provides it
   // View config (controlled by the parent — shared Notion-style view)
   sorts = [], groupBy = '', hidden = [],
   columnOrder = [], columnWidths = null, calcs = null,
@@ -173,6 +185,8 @@ export default function TaskTable({
       case 'assignee': return t.assignee || '';
       case 'priority': return t.priority || '';
       case 'status': return t.status || '';
+      case 'tags': return (t.taskType?.[0] || '').toLowerCase();
+      case 'progress': return taskProgress(t);
       case 'dueDate': return t.dueDate ? new Date(t.dueDate).getTime() : Infinity;
       case 'createdDate': return t.createdDate ? new Date(t.createdDate).getTime() : Infinity;
       case 'estimatedHours': return t.estimatedHours || 0;
@@ -282,8 +296,8 @@ export default function TaskTable({
   };
 
   // Footer "Calculate" (Notion-style aggregates over the filtered rows)
-  const isNumericCol = (key) => ['estimatedHours', 'actualHours'].includes(key) || cpDef(key)?.type === 'number';
-  const numericValue = (t, key) => key.startsWith('cp_') ? (Number(cpRaw(t, key)) || 0) : (Number(t[key]) || 0);
+  const isNumericCol = (key) => ['estimatedHours', 'actualHours', 'progress'].includes(key) || cpDef(key)?.type === 'number';
+  const numericValue = (t, key) => key === 'progress' ? taskProgress(t) : key.startsWith('cp_') ? (Number(cpRaw(t, key)) || 0) : (Number(t[key]) || 0);
   const CALC_OPTIONS_BASE = [['', 'None'], ['count', 'Count all'], ['count_empty', 'Count empty'], ['count_not_empty', 'Count not empty']];
   const CALC_OPTIONS_NUM = [...CALC_OPTIONS_BASE, ['sum', 'Sum'], ['avg', 'Average']];
   const isEmptyCell = (t, key) => {
@@ -297,6 +311,8 @@ export default function TaskTable({
       case 'assignee': return !t.assignee;
       case 'priority': return !t.priority;
       case 'status': return !t.status;
+      case 'tags': return !(t.taskType?.length);
+      case 'progress': return false;
       case 'dueDate': return !t.dueDate;
       case 'createdDate': return !t.createdDate;
       case 'estimatedHours': return !(t.estimatedHours > 0);
@@ -308,7 +324,7 @@ export default function TaskTable({
     const op = calcs?.[key];
     if (!op) return null;
     const rows = sorted;
-    const unit = key.startsWith('cp_') ? '' : 'h';
+    const unit = key === 'progress' ? '%' : key.startsWith('cp_') ? '' : 'h';
     if (op === 'count') return `Count ${rows.length}`;
     if (op === 'count_empty') return `Empty ${rows.filter(t => isEmptyCell(t, key)).length}`;
     if (op === 'count_not_empty') return `Not empty ${rows.filter(t => !isEmptyCell(t, key)).length}`;
@@ -468,63 +484,98 @@ export default function TaskTable({
         ) : (
           <span className="tt-muted">{sprintName(task.sprintId) || '—'}</span>
         );
-      case 'priority':
+      case 'priority': {
+        const c = priorityColor[task.priority];
+        const pillStyle = task.priority ? { background: c + '1a', color: c } : {};
         return editable ? (
           <select
-            className="tt-select"
+            className={`tt-select tt-pill ${task.priority ? '' : 'tt-pill-empty'}`}
             value={task.priority || ''}
-            style={task.priority ? { color: priorityColor[task.priority] } : {}}
+            style={pillStyle}
             onChange={(e) => onInlineUpdate(task.id, { priority: e.target.value })}
           >
             <option value="">None</option>
             {priorities.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         ) : (
-          task.priority
-            ? <span className="task-priority-badge" style={{ background: priorityColor[task.priority] + '14', color: priorityColor[task.priority] }}>{task.priority}</span>
-            : <span className="tt-muted">—</span>
+          task.priority ? <span className="tt-pill" style={pillStyle}>{task.priority}</span> : <span className="tt-muted">—</span>
         );
+      }
       case 'status':
         return (
-          <select className="tt-select" value={task.status} disabled={!editable} onChange={(e) => onStatusChange(task.id, e.target.value)}>
-            {statuses.map(s => <option key={s} value={s} disabled={!canChangeStatusTo(task, s)}>{s}</option>)}
-          </select>
+          <span className="tt-status">
+            <span className={`tt-status-dot ${STATUS_DOT[task.status] || 'dot-notstarted'}`} />
+            <select
+              className={`tt-select tt-pill badge ${STATUS_BADGE[task.status] || 'badge-notstarted'}`}
+              value={task.status}
+              disabled={!editable}
+              onChange={(e) => onStatusChange(task.id, e.target.value)}
+            >
+              {statuses.map(s => <option key={s} value={s} disabled={!canChangeStatusTo(task, s)}>{s}</option>)}
+            </select>
+          </span>
         );
       case 'assignee':
-        return editable ? (
-          <select className="tt-select" value={task.assignee || ''} onChange={(e) => onInlineUpdate(task.id, { assignee: e.target.value })}>
-            <option value="">Unassigned</option>
-            {teamMembers.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
-          </select>
-        ) : (
-          <span className="tt-muted">{task.assignee || '—'}</span>
+        return (
+          <span className={`tt-person ${task.assignee ? '' : 'tt-person-empty'}`}>
+            {task.assignee ? <Avatar name={task.assignee} members={teamMembers} size={20} /> : <span className="tt-person-blank" />}
+            {editable ? (
+              <select className="tt-select tt-person-select" value={task.assignee || ''} onChange={(e) => onInlineUpdate(task.id, { assignee: e.target.value })}>
+                <option value="">Unassigned</option>
+                {teamMembers.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
+              </select>
+            ) : (
+              <span className="tt-person-name">{task.assignee || 'Unassigned'}</span>
+            )}
+          </span>
         );
-      case 'dueDate':
+      case 'dueDate': {
+        const overdue = task.dueDate && task.status !== 'Completed' && new Date(task.dueDate) < new Date(new Date().toDateString());
         return editable ? (
           <input
             type="date"
-            className="tt-cell-input"
+            className={`tt-cell-input tt-date ${overdue ? 'tt-overdue' : ''}`}
             value={task.dueDate ? String(task.dueDate).slice(0, 10) : ''}
             onChange={(e) => onInlineUpdate(task.id, { dueDate: e.target.value || null })}
           />
         ) : (
-          <span className="tt-muted">{formatDate(task.dueDate) || '—'}</span>
+          <span className={`tt-muted ${overdue ? 'tt-overdue' : ''}`}>{formatDate(task.dueDate) || '—'}</span>
         );
+      }
+      case 'tags':
+        return task.taskType?.length ? (
+          <span className="tt-tags">
+            {task.taskType.slice(0, 3).map(t => { const [bg, fg] = tagColor(t); return <span key={t} className="tt-tag" style={{ background: bg, color: fg }}>{t}</span>; })}
+            {task.taskType.length > 3 && <span className="tt-muted">+{task.taskType.length - 3}</span>}
+          </span>
+        ) : <span className="tt-muted">—</span>;
+      case 'progress': {
+        const pct = taskProgress(task);
+        return (
+          <span className="tt-progress" title={`${pct}% complete`}>
+            <span className="tt-progress-bar"><i style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--accent-green)' : 'var(--primary)' }} /></span>
+            <span className="tt-progress-pct">{pct}%</span>
+          </span>
+        );
+      }
       case 'createdDate':
         return <span className="tt-muted">{formatDate(task.createdDate) || '—'}</span>;
       case 'estimatedHours':
       case 'actualHours':
         return editable ? (
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            className="tt-cell-input tt-hours-input"
-            key={`${task.id}_${col.key}_${task[col.key] ?? 0}`}
-            defaultValue={task[col.key] || 0}
-            onBlur={(e) => { const v = Number(e.target.value) || 0; if (v !== (task[col.key] || 0)) onInlineUpdate(task.id, { [col.key]: v }); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-          />
+          <span className="tt-hours">
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              className="tt-cell-input tt-hours-input"
+              key={`${task.id}_${col.key}_${task[col.key] ?? 0}`}
+              defaultValue={task[col.key] || 0}
+              onBlur={(e) => { const v = Number(e.target.value) || 0; if (v !== (task[col.key] || 0)) onInlineUpdate(task.id, { [col.key]: v }); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+            />
+            <em>h</em>
+          </span>
         ) : (
           <span className="tt-muted">{task[col.key] || 0}h</span>
         );
@@ -609,8 +660,8 @@ export default function TaskTable({
         </div>
       </div>
 
-      <div className="table-wrapper tt-table-wrap">
-        <table className="task-table tt-table">
+      <div className="tt-table-wrap">
+        <table className="tt-table">
           <thead>
             <tr>
               {onToggleSelect && (
@@ -708,8 +759,10 @@ export default function TaskTable({
                   <td colSpan={visibleCols.length + 1 + (onToggleSelect ? 1 : 0)}>
                     <span className="tt-group-head">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: collapsed[group.name] ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }}><polyline points="9 6 15 12 9 18"/></svg>
+                      {groupBy === 'status' && <span className={`tt-status-dot ${STATUS_DOT[group.name] || 'dot-notstarted'}`} />}
+                      {groupBy === 'priority' && priorityColor[group.name] && <span className="tt-status-dot" style={{ background: priorityColor[group.name] }} />}
                       {groupBy === 'assignee' && group.name !== 'No assignee' && (
-                        <span className="tt-group-avatar">{renderAvatar(group.name)}</span>
+                        <Avatar name={group.name} members={teamMembers} size={20} />
                       )}
                       <span className="tt-group-name">{group.name}</span>
                       <span className="tt-group-count">{group.rows.length}</span>

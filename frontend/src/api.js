@@ -44,6 +44,10 @@ export const downloadAttachmentBlob = (key) =>
   API.get(`/files/attachments/${key}`, { responseType: 'blob' });
 // Signed, expiring public link for in-app previews / the Office viewer
 export const getAttachmentSignedUrl = (key) => API.get(`/files/attachments/${key}/signed-url`);
+// Discussion thread — each call returns the task's full, updated comment list
+export const addTaskComment = (taskId, text) => API.post(`/tasks/${taskId}/comments`, { text });
+export const reactTaskComment = (taskId, commentId, emoji) => API.post(`/tasks/${taskId}/comments/${commentId}/react`, { emoji });
+export const deleteTaskComment = (taskId, commentId) => API.delete(`/tasks/${taskId}/comments/${commentId}`);
 
 // Team
 export const getTeam = () => API.get('/team');

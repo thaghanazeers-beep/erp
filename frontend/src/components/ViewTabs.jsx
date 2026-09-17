@@ -1,15 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import './ViewTabs.css';
 
+const I = (d) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>;
 const VIEW_OPTIONS = [
-  { id: 'table', icon: '☰', label: 'Table' },
-  { id: 'board', icon: '◫', label: 'Board' },
-  { id: 'timeline', icon: '◴', label: 'Timeline' },
-  { id: 'calendar', icon: '📅', label: 'Calendar' },
-  { id: 'gallery', icon: '⊞', label: 'Gallery' },
-  { id: 'list', icon: '≡', label: 'List' },
-  { id: 'grid', icon: '⋮', label: 'Grid' },
-  { id: 'orgchart', icon: '🏢', label: 'Org Chart' },
+  { id: 'board',    label: 'Kanban',    icon: I(<><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></>) },
+  { id: 'calendar', label: 'Calendar',  icon: I(<><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>) },
+  { id: 'timeline', label: 'Timeline',  icon: I(<><line x1="3" y1="7" x2="11" y2="7"/><line x1="8" y1="12" x2="19" y2="12"/><line x1="5" y1="17" x2="15" y2="17"/></>) },
+  { id: 'list',     label: 'List',      icon: I(<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></>) },
+  { id: 'table',    label: 'Table',     icon: I(<><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="10" x2="9" y2="20"/></>) },
+  { id: 'gallery',  label: 'Gallery',   icon: '⊞' },
+  { id: 'grid',     label: 'Grid',      icon: '⋮' },
+  { id: 'orgchart', label: 'Org Chart', icon: '🏢' },
 ];
 
 export default function ViewTabs({ views, activeViewId, onAddView, onChangeView, onRenameView, onDeleteView, allowedTypes }) {
@@ -21,11 +22,7 @@ export default function ViewTabs({ views, activeViewId, onAddView, onChangeView,
   const options = allowedTypes ? VIEW_OPTIONS.filter(o => allowedTypes.includes(o.id)) : VIEW_OPTIONS;
 
   useEffect(() => {
-    const handler = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
-        setShowPopover(false);
-      }
-    };
+    const handler = (e) => { if (popoverRef.current && !popoverRef.current.contains(e.target)) setShowPopover(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
@@ -73,7 +70,7 @@ export default function ViewTabs({ views, activeViewId, onAddView, onChangeView,
         ))}
 
         <div className="view-add-wrapper" ref={popoverRef}>
-          <button className="view-add-btn" onClick={() => setShowPopover(!showPopover)}>+</button>
+          <button className="view-add-btn" onClick={() => setShowPopover(!showPopover)} title="Add a view">+</button>
 
           {showPopover && (
             <div className="view-popover animate-in">

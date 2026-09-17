@@ -6,6 +6,11 @@ import TaskDetailPage from './TaskDetailPage';
 import ViewTabs from '../components/ViewTabs';
 import FileTypeIcon from '../components/FileTypeIcon';
 import TaskTable from '../components/TaskTable';
+import TaskPanel from '../components/TaskPanel';
+import { tagColor } from '../components/taskUtils';
+import CalendarView from '../components/CalendarView';
+import TimelineView from '../components/TimelineView';
+import { AvatarStack } from '../components/Avatar';
 import './TasksPage.css';
 
 const STATUSES = ['Not Yet Started', 'In Progress', 'In Review', 'Completed', 'Rejected'];
@@ -26,6 +31,29 @@ const STATUS_BADGE = {
   'Rejected': 'badge-rejected',
 };
 
+// Accent color per status — kanban column bars, calendar dots, timeline bars
+const STATUS_COLOR = {
+  'Not Yet Started': 'var(--text-muted)',
+  'In Progress': 'var(--accent-blue)',
+  'In Review': 'var(--accent-orange)',
+  'Completed': 'var(--accent-green)',
+  'Rejected': 'var(--accent-red)',
+};
+const COLUMN_LABEL = { 'Not Yet Started': 'To Do', 'In Progress': 'In Progress', 'In Review': 'In Review', 'Completed': 'Completed', 'Rejected': 'Rejected' };
+
+// Short, stable display id for a card (e.g. T-3F9A) derived from the task id
+const shortId = (t) => 'T-' + String(t.id || t._id || '').replace(/^task_/, '').replace(/-/g, '').slice(-4).toUpperCase();
+
+// Plain-text preview of the block-based description
+const descText = (task) => {
+  if (!task.description) return '';
+  try {
+    const parsed = JSON.parse(task.description);
+    if (Array.isArray(parsed)) return parsed.filter(b => b.content).map(b => b.content.replace(/^\[[ x]\]\s*/, '')).join(' ');
+  } catch { /* plain string */ }
+  return task.description;
+};
+
 export default function TasksPage() {
   const { user } = useAuth();
   const { activeTeamspaceId } = useTeamspace();
@@ -36,16 +64,19 @@ export default function TasksPage() {
   // Real teamspaces store views on the server (shared by every member);
   // the Personal space keeps them in localStorage.
   const DEFAULT_VIEWS = [
+    { id: 'v_board', name: 'Kanban', type: 'board', filters: null, sorts: [], groupBy: '', hiddenColumns: [] },
     { id: 'v_table', name: 'Table', type: 'table', filters: null, sorts: [], groupBy: '', hiddenColumns: ['createdDate'] },
-    { id: 'v_board', name: 'Board', type: 'board', filters: null, sorts: [], groupBy: '', hiddenColumns: [] },
+    { id: 'v_list', name: 'List', type: 'list', filters: null, sorts: [], groupBy: '', hiddenColumns: [] },
+    { id: 'v_calendar', name: 'Calendar', type: 'calendar', filters: null, sorts: [], groupBy: '', hiddenColumns: [] },
+    { id: 'v_timeline', name: 'Timeline', type: 'timeline', filters: null, sorts: [], groupBy: '', hiddenColumns: [] },
   ];
   const isPersonalSpace = !activeTeamspaceId || activeTeamspaceId === '__personal__';
   const tsKey = isPersonalSpace ? 'personal' : activeTeamspaceId;
 
   const [views, setViews] = useState(DEFAULT_VIEWS);
-  const [activeViewId, setActiveViewId] = useState('v_table');
+  const [activeViewId, setActiveViewId] = useState('v_board');
   const activeView = views.find(v => v.id === activeViewId) || views[0] || DEFAULT_VIEWS[0];
-  const viewType = activeView.type || 'table';
+  const viewType = activeView.type || 'board';
 
   const saveTimer = useRef(null);
   const persistViews = (next) => {
@@ -88,7 +119,9 @@ export default function TasksPage() {
     localStorage.setItem(`tasks_active_view_${tsKey}`, activeViewId);
   }, [activeViewId, tsKey]);
   const [loading, setLoading] = useState(true);
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null); // opens the slide-over panel
+  const [fullTask, setFullTask] = useState(null);         // opens the full-page editor
+  const [colMenu, setColMenu] = useState(null);           // kanban column "⋮" menu
   const [teamMembers, setTeamMembers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [sprints, setSprints] = useState([]);
@@ -287,32 +320,36 @@ export default function TasksPage() {
     catch (err) { console.error(err); }
   };
 
-  const handleCreateNew = async () => {
+  // New task — optionally straight into a kanban column's status
+  const handleCreateNew = async (status = 'Not Yet Started') => {
     try {
       const newTask = {
         id: `task_${Date.now()}`,
         title: 'Untitled',
         description: '',
-        status: 'Not Yet Started',
+        status: typeof status === 'string' ? status : 'Not Yet Started',
         assignee: '',
+        priority: '',
         dueDate: null,
         createdDate: new Date().toISOString(),
         customProperties: [],
         attachments: [],
+        taskType: [],
         parentId: null,
-        // Pre-fill the project when a single "Project is …" filter is active
+        // Pre-fill the project/sprint when a single "is …" filter is active
         projectId: filterRules.find(r => r.field === 'project' && r.op === 'is' && r.value)?.value || null,
+        sprintId: filterRules.find(r => r.field === 'sprint' && r.op === 'is' && r.value)?.value || null,
         estimatedHours: 0,
         actualHours: 0,
       };
-      await createTask(newTask);
+      const res = await createTask(newTask);
       await fetchTasks();
-      setSelectedTask(newTask);
+      setSelectedTask(res.data || newTask);
     } catch (err) { console.error(err); }
   };
 
   const isAdminOrOwner = user?.role === 'Admin' || user?.role === 'Team Owner';
-  
+
   const canEditTask = (task) => {
     if (isAdminOrOwner) return true;
     return task.assignee === user?.name;
@@ -505,6 +542,7 @@ export default function TasksPage() {
     if (!d) return '';
     return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
+  const formatShort = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
 
   const renderAvatar = (name) => {
     const member = teamMembers.find(m => m.name === name);
@@ -514,6 +552,14 @@ export default function TasksPage() {
     return name.charAt(0).toUpperCase();
   };
 
+  // Progress: subtasks done → hours used → a sensible status default
+  const taskProgress = (t) => {
+    const subs = tasks.filter(x => x.parentId === t.id);
+    if (subs.length) return Math.round((100 * subs.filter(s => s.status === 'Completed').length) / subs.length);
+    if (t.estimatedHours > 0) return Math.min(100, Math.round((100 * (t.actualHours || 0)) / t.estimatedHours));
+    return { 'Not Yet Started': 0, 'In Progress': 35, 'In Review': 80, 'Completed': 100, 'Rejected': 0 }[t.status] ?? 0;
+  };
+
   // In v5, filters/sorts live ON the shared view — every edit saves for the
   // whole teamspace automatically (Notion semantics). Personal space stays local.
   const clearFilters = () => {
@@ -521,11 +567,12 @@ export default function TasksPage() {
     setSearchQuery('');
   };
 
-  if (selectedTask) {
+  // Full-page editor (from the panel's "Open full page")
+  if (fullTask) {
     return (
       <TaskDetailPage
-        task={selectedTask}
-        onBack={() => { setSelectedTask(null); fetchTasks(); }}
+        task={fullTask}
+        onBack={() => { setFullTask(null); fetchTasks(); }}
         onUpdated={fetchTasks}
       />
     );
@@ -572,21 +619,117 @@ export default function TasksPage() {
     fetchTasks();
   };
 
+  // The panel always shows the freshest copy of the selected task
+  const panelTask = selectedTask ? (tasks.find(t => t.id === selectedTask.id) || selectedTask) : null;
+
+  // Page header context: the project / sprint a single "is …" filter points at
+  const projectFilterId = filterRules.find(r => r.field === 'project' && r.op === 'is' && r.value)?.value;
+  const activeProject = projects.find(p => p._id === projectFilterId);
+  const sprintFilterId = filterRules.find(r => r.field === 'sprint' && r.op === 'is' && r.value)?.value;
+  const activeSprint = sprints.find(s => s._id === sprintFilterId);
+  const doneCount = filteredTasks.filter(t => t.status === 'Completed').length;
+  const inReview = filteredTasks.filter(t => t.status === 'In Review').length;
+
+  const renderCard = (task, i) => {
+    const pct = taskProgress(task);
+    const tag = task.taskType?.[0];
+    const [tagBg, tagFg] = tag ? tagColor(tag) : [];
+    const people = [task.assignee, ...(task.comments || []).map(c => c.author)];
+    const overdue = task.dueDate && task.status !== 'Completed' && new Date(task.dueDate) < new Date(new Date().toDateString());
+    const preview = descText(task);
+    return (
+      <div className="task-card animate-in" key={task.id}
+        style={{ animationDelay: `${Math.min(i, 12) * 0.03}s`, opacity: canEditTask(task) ? 1 : 0.85 }}
+        draggable={canEditTask(task)} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd}
+        onClick={() => setSelectedTask(task)}
+      >
+        <div className="kb-top">
+          {task.priority && (
+            <span className="kb-badge" style={{ background: PRIORITY_COLOR[task.priority] + '1a', color: PRIORITY_COLOR[task.priority] }}>{task.priority}</span>
+          )}
+          {tag && <span className="kb-badge" style={{ background: tagBg, color: tagFg }}>{tag}</span>}
+          {!task.priority && !tag && task.projectId && <span className="kb-badge kb-badge-muted">{getProjectName(task.projectId)}</span>}
+          <span className="kb-id">{shortId(task)}</span>
+        </div>
+        <h4 className="kb-title">{task.title}</h4>
+        {preview && <p className="kb-desc">{preview}</p>}
+        <div className="kb-progress">
+          <div className="kb-progress-row">
+            <span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 12a9 9 0 11-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>
+              Progress
+            </span>
+            <b>{pct}%</b>
+          </div>
+          <div className="kb-progress-bar"><i style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--accent-green)' : 'var(--primary)' }} /></div>
+        </div>
+        <div className="kb-footer">
+          <div className="kb-footer-left">
+            <AvatarStack names={people} members={teamMembers} size={22} max={3} />
+            {task.dueDate && (
+              <span className={`kb-due ${overdue ? 'overdue' : ''}`} title={overdue ? 'Overdue' : 'Due date'}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                {formatShort(task.dueDate)}
+              </span>
+            )}
+          </div>
+          <div className="kb-counts">
+            <span title="Comments">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              {task.comments?.length || 0}
+            </span>
+            <span title="Attachments">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+              {task.attachments?.length || 0}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="tasks-page">
-      <ViewTabs
-        views={views}
-        activeViewId={activeViewId}
-        onChangeView={setActiveViewId}
-        onAddView={handleAddView}
-        onRenameView={handleRenameView}
-        onDeleteView={handleDeleteView}
-        allowedTypes={['table', 'board']}
-      />
+      {/* ─── Page header: project context + team + new task ─── */}
+      <div className="pg-header">
+        <div className="pg-header-left">
+          <div className="pg-proj">{activeProject?.icon || (activeProject?.name || 'T').charAt(0).toUpperCase()}</div>
+          <div className="pg-header-text">
+            <h1 className="pg-title">
+              {activeProject ? activeProject.name : activeSprint ? activeSprint.name : 'All tasks'}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+            </h1>
+            <div className="pg-meta">
+              <span><b>{filteredTasks.length}</b> tasks</span>
+              <span><b>{doneCount}</b> completed</span>
+              {inReview > 0 && <span><b>{inReview}</b> in review</span>}
+              {activeSprint && activeProject && <span>Sprint: <b>{activeSprint.name}</b></span>}
+              {activeProject?.status && <span>Status: <b className="pg-status">{activeProject.status}</b></span>}
+            </div>
+          </div>
+        </div>
+        <div className="pg-header-right">
+          <AvatarStack names={teamMembers.map(m => m.name)} members={teamMembers} size={30} max={4} />
+          <button className="btn btn-primary" onClick={() => handleCreateNew()}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Task
+          </button>
+        </div>
+      </div>
 
-      {/* ─── Toolbar ─── */}
-      <div className="tasks-toolbar" style={{ paddingTop: 0 }}>
-        <div className="tasks-toolbar-left">
+      {/* ─── Controls: view switcher + search + filter ─── */}
+      <div className="pg-controls">
+        <ViewTabs
+          views={views}
+          activeViewId={activeViewId}
+          onChangeView={setActiveViewId}
+          onAddView={handleAddView}
+          onRenameView={handleRenameView}
+          onDeleteView={handleDeleteView}
+          allowedTypes={['board', 'calendar', 'timeline', 'list', 'table']}
+        />
+
+        <div className="pg-controls-right">
           {/* Search */}
           <div className="search-box">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -596,11 +739,11 @@ export default function TasksPage() {
           {/* Filter trigger */}
           <div className="filter-dropdown-root">
             <button
-              className={`btn btn-ghost btn-sm filter-trigger ${openFilter ? 'active-filter' : ''}`}
+              className={`btn btn-ghost btn-sm filter-trigger ${openFilter || activeFilters.length ? 'active-filter' : ''}`}
               onClick={() => setOpenFilter(openFilter ? null : 'assignee')}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/></svg>
-              Filter
+              Filter{activeFilters.length > 0 && <span className="filter-count">{activeFilters.length}</span>}
             </button>
 
             {/* Filter panel — Notion-style rule builder */}
@@ -728,8 +871,12 @@ export default function TasksPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Active filter badges */}
+      {/* Active filter chips */}
+      {activeFilters.length > 0 && (
+        <div className="pg-chips">
           {activeFilters.map(f => (
             <span key={f.key} className="filter-chip">
               <span className="filter-chip-label">{f.label}:</span>
@@ -739,23 +886,16 @@ export default function TasksPage() {
               </button>
             </span>
           ))}
-
-          <span className="tasks-count">{filteredTasks.length} tasks</span>
+          <button className="pg-chips-clear" onClick={clearFilters}>Clear all</button>
         </div>
+      )}
 
-        <div className="tasks-toolbar-right">
-          <button className="btn btn-primary btn-sm" onClick={handleCreateNew}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            New Task
-          </button>
-        </div>
-      </div>
-
-      {/* Click outside to close filter panel */}
+      {/* Click outside to close popovers */}
       {openFilter && <div className="filter-overlay" onClick={() => setOpenFilter(null)} />}
+      {colMenu && <div className="filter-overlay" onClick={() => setColMenu(null)} />}
 
       <div className="tasks-content">
-        {/* Board View */}
+        {/* ─── Kanban board ─── */}
         {viewType === 'board' && (
           <div className="board">
             {STATUSES.map((status) => {
@@ -765,76 +905,53 @@ export default function TasksPage() {
                   onDragOver={(e) => handleDragOver(e, status)}
                   onDrop={(e) => handleDrop(e, status)}
                 >
-                  <div className="board-column-header">
-                    <div className="board-column-title">
-                      <span className={`board-dot ${STATUS_DOT[status]}`} />
-                      <h3>{status}</h3>
-                      <span className="board-column-count">{statusTasks.length}</span>
+                  <div className="kb-head">
+                    <span className="kb-bar" style={{ background: STATUS_COLOR[status] }} />
+                    <h3>{COLUMN_LABEL[status]}</h3>
+                    <span className="kb-count">{statusTasks.length}</span>
+                    <div className="kb-actions">
+                      <button className="btn-icon" title="Add task" onClick={() => handleCreateNew(status)}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      </button>
+                      <button className="btn-icon" title="Column options" onClick={() => setColMenu(colMenu === status ? null : status)}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                      </button>
+                      {colMenu === status && (
+                        <div className="kb-menu animate-in">
+                          <button onClick={() => { setColMenu(null); handleCreateNew(status); }}>Add task here</button>
+                          <button onClick={() => { setColMenu(null); applyColumnFilter('status', status); }}>Show only this status</button>
+                          {filterRules.some(r => r.field === 'status') && (
+                            <button onClick={() => { setColMenu(null); applyColumnFilter('status', ''); }}>Clear status filter</button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="board-column-cards">
-                    {statusTasks.map((task, i) => (
-                      <div className="task-card animate-in" key={task.id} style={{ animationDelay: `${Math.min(i, 12) * 0.03}s`, opacity: canEditTask(task) ? 1 : 0.8 }}
-                        draggable={canEditTask(task)} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd}
-                        onClick={() => setSelectedTask(task)}
-                      >
-                        {(task.projectId || task.priority) && (
-                          <div className="task-card-top">
-                            {task.projectId && <span className="task-card-project">{getProjectName(task.projectId)}</span>}
-                            {task.priority && (
-                              <span className="task-priority-badge" style={{ background: PRIORITY_COLOR[task.priority] + '14', color: PRIORITY_COLOR[task.priority] }}>
-                                {task.priority}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        <h4 className="task-card-title">{task.title}</h4>
-                        {task.description && (() => {
-                          try {
-                            const parsed = JSON.parse(task.description);
-                            if (Array.isArray(parsed)) {
-                              const txt = parsed.filter(b => b.content).map(b => b.content.replace(/^\[[ x]\]\s*/, '')).join(' ');
-                              return txt ? <p className="task-card-desc">{txt}</p> : null;
-                            }
-                          } catch {}
-                          return <p className="task-card-desc">{task.description}</p>;
-                        })()}
-                        <div className="task-card-footer">
-                          <div className="task-card-meta">
-                            {task.dueDate && (
-                              <span className="task-card-date">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                {formatDate(task.dueDate)}
-                              </span>
-                            )}
-                            {(task.estimatedHours > 0 || task.actualHours > 0) && (
-                              <span className="task-card-hours">{task.actualHours || 0}/{task.estimatedHours || 0}h</span>
-                            )}
-                            {task.attachments?.length > 0 && (
-                              <span className="task-card-attachments" title={`${task.attachments.length} attachment${task.attachments.length > 1 ? 's' : ''}`}>
-                                <FileTypeIcon name={task.attachments[0].name} size={12} />
-                                {task.attachments.length > 1 && task.attachments.length}
-                              </span>
-                            )}
-                            {task.assignee && (
-                              <span className="task-card-assignee">
-                                <div className="task-card-avatar">{renderAvatar(task.assignee)}</div>
-                                {task.assignee}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="kb-cards">
+                    {statusTasks.map((task, i) => renderCard(task, i))}
                     {statusTasks.length === 0 && <div className="board-empty"><p>Drop tasks here</p></div>}
                   </div>
+                  <button className="kb-add" onClick={() => handleCreateNew(status)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add new
+                  </button>
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* List View */}
+        {/* ─── Calendar ─── */}
+        {viewType === 'calendar' && (
+          <CalendarView tasks={filteredTasks} statusColor={STATUS_COLOR} onOpen={setSelectedTask} />
+        )}
+
+        {/* ─── Timeline ─── */}
+        {viewType === 'timeline' && (
+          <TimelineView tasks={filteredTasks} teamMembers={teamMembers} statusColor={STATUS_COLOR} onOpen={setSelectedTask} />
+        )}
+
+        {/* ─── List ─── */}
         {viewType === 'list' && (
           <div className="list-view">
             {/* Bulk Action Bar */}
@@ -842,8 +959,8 @@ export default function TasksPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 20px', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 16 }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedTasksIds.length} tasks selected</span>
                 <div style={{ flex: 1 }} />
-                <select 
-                  className="input" 
+                <select
+                  className="input"
                   style={{ width: 200, padding: '6px 12px', fontSize: '0.8rem' }}
                   onChange={e => handleBulkChangeSprint(e.target.value)}
                   value=""
@@ -916,7 +1033,7 @@ export default function TasksPage() {
           </div>
         )}
 
-        {/* Table View */}
+        {/* ─── Table ─── */}
         {viewType === 'table' && selectedTasksIds.length > 0 && (
           <div className="tt-bulkbar">
             <span className="tt-bulkbar-count">{selectedTasksIds.length} selected</span>
@@ -953,6 +1070,7 @@ export default function TasksPage() {
             onFilter={applyColumnFilter}
             formatDate={formatDate}
             renderAvatar={renderAvatar}
+            taskProgress={taskProgress}
             sorts={activeView.sorts || []}
             groupBy={activeView.groupBy || ''}
             hidden={activeView.hiddenColumns || []}
@@ -970,6 +1088,28 @@ export default function TasksPage() {
           />
         )}
       </div>
+
+      {/* ─── Slide-over task panel ─── */}
+      {panelTask && (
+        <TaskPanel
+          key={panelTask.id}
+          task={panelTask}
+          allTasks={tasks}
+          teamMembers={teamMembers}
+          projects={projects}
+          sprints={sprints}
+          statuses={STATUSES}
+          priorities={PRIORITIES}
+          priorityColor={PRIORITY_COLOR}
+          currentUser={user}
+          canEdit={canEditTask(panelTask)}
+          canChangeStatusTo={(s) => canChangeStatusTo(panelTask, s)}
+          onClose={() => { setSelectedTask(null); fetchTasks(); }}
+          onOpenFull={() => { setFullTask(panelTask); setSelectedTask(null); }}
+          onUpdated={fetchTasks}
+          onDeleted={() => { setSelectedTask(null); fetchTasks(); }}
+        />
+      )}
     </div>
   );
 }

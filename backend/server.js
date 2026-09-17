@@ -559,6 +559,13 @@ app.post('/api/team/merge', requireAdmin, async (req, res) => {
       stats.accountDeleted = true;
     }
 
+    // Remember the merged name so future Notion imports keep mapping it to the target
+    const aliasNames = [sourceName, ...(source?.aliases || [])].filter(n => n && n !== target.name);
+    if (aliasNames.length) {
+      await User.updateOne({ _id: target._id }, { $addToSet: { aliases: { $each: aliasNames } } });
+    }
+    stats.aliasesRecorded = aliasNames.length;
+
     res.json({ merged: true, source: sourceName, target: target.name, stats });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -577,7 +584,9 @@ app.post('/api/users/:id/avatar', avatarUpload.single('avatar'), async (req, res
     const ext = ALLOWED_IMAGE_TYPES[req.file.mimetype];
     const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
     await fileStore.putFile(`avatars/${filename}`, req.file.buffer, req.file.mimetype);
-    const avatarUrl = `${SERVER_URL}/files/avatars/${filename}`;
+    // Relative URL: resolves against whatever host serves the app (local, Hostinger,
+    // a custom domain) instead of freezing the dev SERVER_URL into the database.
+    const avatarUrl = `/files/avatars/${filename}`;
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { profilePictureUrl: avatarUrl },
@@ -703,6 +712,88 @@ app.get('/api/tasks', async (req, res) => {
 
     const tasks = await query;
     res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== TASK COMMENTS (discussion thread) ====================
+// Comments are appended server-side (not via PUT /tasks) so two people
+// commenting at once can't overwrite each other's thread.
+async function notifyCommentTargets(task, author, text) {
+  const targets = new Set();
+  if (task.assignee && task.assignee !== author) targets.add(task.assignee);
+  // "@Full Name" mentions, matched against real user names
+  try {
+    const users = await User.find({ active: { $ne: false } }, 'name');
+    for (const u of users) {
+      if (u.name && u.name !== author && text.includes(`@${u.name}`)) targets.add(u.name);
+    }
+  } catch { /* mentions are best-effort */ }
+  for (const userId of targets) {
+    createNotification({
+      type: 'task_comment',
+      title: 'New comment',
+      message: `${author} commented on "${task.title}"`,
+      taskId: task.id, taskTitle: task.title, userId, actorName: author,
+    });
+  }
+}
+
+app.post('/api/tasks/:id/comments', async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ message: 'Comment text is required' });
+    if (text.length > 5000) return res.status(400).json({ message: 'Comment is too long (max 5000 characters)' });
+    const task = await Task.findOne({ id: req.params.id });
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    task.comments.push({ id: `c_${crypto.randomUUID()}`, author: req.user.name, text, createdAt: new Date(), reactions: [] });
+    await task.save();
+    notifyCommentTargets(task, req.user.name, text);
+    res.status(201).json(task.comments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle the caller's reaction (emoji) on a comment
+app.post('/api/tasks/:id/comments/:cid/react', async (req, res) => {
+  try {
+    const emoji = String(req.body?.emoji || '').slice(0, 8);
+    if (!emoji) return res.status(400).json({ message: 'emoji is required' });
+    const task = await Task.findOne({ id: req.params.id });
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    const comment = task.comments.find(c => c.id === req.params.cid);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    const existing = comment.reactions.find(r => r.emoji === emoji);
+    if (!existing) {
+      comment.reactions.push({ emoji, users: [req.user.name] });
+    } else {
+      const i = existing.users.indexOf(req.user.name);
+      if (i >= 0) existing.users.splice(i, 1); else existing.users.push(req.user.name);
+      if (existing.users.length === 0) comment.reactions = comment.reactions.filter(r => r.emoji !== emoji);
+    }
+    task.markModified('comments');
+    await task.save();
+    res.json(task.comments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/tasks/:id/comments/:cid', async (req, res) => {
+  try {
+    const task = await Task.findOne({ id: req.params.id });
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    const comment = task.comments.find(c => c.id === req.params.cid);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    const isAdmin = req.user.role === 'Admin' || req.user.role === 'Team Owner';
+    if (comment.author !== req.user.name && !isAdmin) {
+      return res.status(403).json({ message: 'Only the comment author or an admin can delete it' });
+    }
+    task.comments = task.comments.filter(c => c.id !== req.params.cid);
+    await task.save();
+    res.json(task.comments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
