@@ -7,6 +7,7 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const crypto = require('crypto');
+const { Readable } = require('stream');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
@@ -144,6 +145,75 @@ app.get('/files/avatars/:key', async (req, res) => {
 const signPreviewToken = (key, exp) =>
   crypto.createHmac('sha256', process.env.JWT_SECRET).update(`att-preview:${key}:${exp}`).digest('hex');
 
+// ==================== ATTACHMENT RESOLUTION (storage → Notion fallback) ====================
+// Notion-imported attachments keep their source block id. When the stored copy
+// is gone (it lived on a server disk that was wiped on redeploy), fetch the file
+// from Notion again on demand — Notion is the durable source of truth for those
+// files — and, when a durable storage backend is configured, write it back so
+// the next request is served locally. App-uploaded files have no Notion source
+// and still 404 if their bytes are lost.
+const ATTACHMENT_MIME = {
+  '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.mp4': 'video/mp4', '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg', '.zip': 'application/zip', '.csv': 'text/csv', '.txt': 'text/plain',
+  '.json': 'application/json', '.md': 'text/markdown',
+  '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint', '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+const NOTION_URL_TTL_MS = 50 * 60 * 1000; // Notion's signed URLs last ~1h; reuse within 50 min
+const notionUrlCache = new Map();          // notionBlockId -> { url, until }
+
+async function notionFileUrl(notionBlockId) {
+  if (!process.env.NOTION_TOKEN) return null;
+  const hit = notionUrlCache.get(notionBlockId);
+  if (hit && hit.until > Date.now()) return hit.url;
+  const { Client } = require('@notionhq/client');
+  const notion = new Client({ auth: process.env.NOTION_TOKEN });
+  let url = null;
+  const prop = notionBlockId.match(/^(.+?):prop:(.+):(\d+)$/); // "<pageId>:prop:<property>:<index>"
+  if (prop) {
+    const page = await notion.pages.retrieve({ page_id: prop[1] });
+    const f = page.properties?.[prop[2]]?.files?.[Number(prop[3])];
+    url = f?.file?.url || f?.external?.url || null;
+  } else {
+    const block = await notion.blocks.retrieve({ block_id: notionBlockId });
+    const data = block?.[block.type];
+    url = data?.file?.url || data?.external?.url || null;
+  }
+  if (url) notionUrlCache.set(notionBlockId, { url, until: Date.now() + NOTION_URL_TTL_MS });
+  return url;
+}
+
+async function getAttachmentFile(key) {
+  const stored = await fileStore.getFile(`attachments/${key}`);
+  if (stored) return stored;
+
+  const apiPath = `/api/files/attachments/${key}`;
+  const task = await Task.findOne({ 'attachments.path': apiPath }, 'attachments').lean();
+  const att = task?.attachments?.find(a => a.path === apiPath);
+  if (!att?.notionBlockId) return null;
+
+  let url;
+  try { url = await notionFileUrl(att.notionBlockId); }
+  catch (err) { console.warn(`Notion lookup failed for ${key}: ${err.message}`); return null; }
+  if (!url) return null;
+
+  const upstream = await fetch(url);
+  if (!upstream.ok || !upstream.body) return null;
+  const contentType = upstream.headers.get('content-type') || ATTACHMENT_MIME[path.extname(key).toLowerCase()];
+  const contentLength = Number(upstream.headers.get('content-length')) || undefined;
+
+  if (fileStore.isConfigured() && contentLength && contentLength <= 25 * 1024 * 1024) {
+    // Durable storage available: keep a copy so this is a one-time fetch.
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    try { await fileStore.putFile(`attachments/${key}`, buffer, contentType); }
+    catch (err) { console.warn(`Write-back to storage failed for ${key}: ${err.message}`); }
+    return { body: Readable.from(buffer), contentType, contentLength: buffer.length };
+  }
+  return { body: Readable.fromWeb(upstream.body), contentType, contentLength };
+}
+
 app.get('/files/att-preview/:key', async (req, res) => {
   try {
     if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) return res.status(400).end();
@@ -157,7 +227,7 @@ app.get('/files/att-preview/:key', async (req, res) => {
     if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
       return res.status(403).end();
     }
-    const f = await fileStore.getFile(`attachments/${req.params.key}`);
+    const f = await getAttachmentFile(req.params.key);
     if (!f) return res.status(404).end();
     const PREVIEW_MIME = {
       '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
@@ -974,7 +1044,7 @@ app.get('/api/files/attachments/:key/signed-url', async (req, res) => {
 app.get('/api/files/attachments/:key', async (req, res) => {
   try {
     if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) return res.status(400).end();
-    const f = await fileStore.getFile(`attachments/${req.params.key}`);
+    const f = await getAttachmentFile(req.params.key);
     if (!f) return res.status(404).json({ message: 'File not found' });
     if (f.contentType) res.setHeader('Content-Type', f.contentType);
     if (f.contentLength) res.setHeader('Content-Length', f.contentLength);
