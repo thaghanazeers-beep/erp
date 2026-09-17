@@ -372,6 +372,9 @@ app.use('/api', requireAuth);
 
 app.get('/api/auth/me', (req, res) => res.json(req.user));
 
+// ==================== ERP (timesheets, P&L, reports, resources) ====================
+app.use('/api/erp', require('./routes/erp'));
+
 // ==================== TEAMSPACE ROUTES ====================
 const TEAMSPACE_FIELDS = ['name', 'description', 'icon', 'members', 'isPersonal', 'defaultTaskFilters'];
 
@@ -696,7 +699,7 @@ app.put('/api/users/:id', async (req, res) => {
 });
 
 // ==================== PROJECT ROUTES ====================
-const PROJECT_FIELDS = ['name', 'description', 'color', 'icon', 'teamspaceId'];
+const PROJECT_FIELDS = ['name', 'description', 'color', 'icon', 'teamspaceId', 'client', 'type', 'status', 'startDate', 'endDate', 'managerId', 'memberIds', 'budget', 'categories', 'billable'];
 
 app.get('/api/projects', async (req, res) => {
   try {

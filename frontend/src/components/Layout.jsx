@@ -105,10 +105,20 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
   const personalExpanded = expandedTs[PERSONAL_TS_ID] === true; // default collapsed
   const isPersonalChildActive = (page) => isPersonalActive && activePage === page;
 
+  const erpItems = [
+    { id: 'timesheet',     label: 'Timesheet',       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+    { id: 'approvals',     label: 'Approvals',       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> },
+    { id: 'erp-team',      label: 'Team Dashboard',  icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
+    { id: 'pnl',           label: 'Profit & Loss',   icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> },
+    { id: 'erp-reports',   label: 'Reports',         icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg> },
+    { id: 'erp-resources', label: 'Resources',       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
+  ];
+
   const pageTitles = {
     dashboard: 'Dashboard', tasks: 'Tasks', projects: 'Projects', sprints: 'Sprints',
     workflows: 'Workflows', team: 'Team Members', organization: 'Organization',
     'team-settings': 'Team Settings', 'teamspace-control': 'Teamspace Control', profile: 'Profile',
+    timesheet: 'Timesheet', approvals: 'Approvals', 'erp-team': 'Team Dashboard', pnl: 'Profit & Loss', 'erp-reports': 'Reports', 'erp-resources': 'Resources',
   };
 
   return (
@@ -226,11 +236,15 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
           </button>
 
           {/* Legacy ERP (timesheets, P&L, reports) — opens the separate portal in a new tab */}
-          <a className="sidebar-link" href="https://mayvelerp.mayvel.ai/" target="_blank" rel="noopener noreferrer" title="Open the Mayvel ERP portal (timesheets, P&L, reports)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
-            <span>ERP</span>
-            <svg className="sidebar-ext" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
-          </a>
+          {/* ─── ERP: timesheets, approvals, P&L, reports, resources ─── */}
+          <div className="sidebar-section-row" style={{ marginTop: 12 }}>
+            <span className="sidebar-section-label">ERP</span>
+          </div>
+          {erpItems.map(item => (
+            <button key={item.id} className={`sidebar-link ${activePage === item.id ? 'active' : ''}`} onClick={() => onNavigate(item.id)}>
+              {item.icon}<span>{item.label}</span>
+            </button>
+          ))}
 
           <button className={`sidebar-link ${activePage === 'profile' ? 'active' : ''}`} onClick={() => onNavigate('profile')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>

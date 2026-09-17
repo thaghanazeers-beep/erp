@@ -81,3 +81,6 @@ analysis_options.yaml
 task.iml
 .dart_tool/
 .idea/
+
+# Crawled legacy-ERP seed data (contains salary rates)
+backend/scripts/data/

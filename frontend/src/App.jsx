@@ -14,8 +14,14 @@ import OrgChartPage from './pages/OrgChartPage';
 import TeamSettingsPage from './pages/TeamSettingsPage';
 import TeamspaceControlPage from './pages/TeamspaceControlPage';
 import Layout from './components/Layout';
+import ErpTimesheetPage from './pages/erp/ErpTimesheetPage';
+import ErpApprovalsPage from './pages/erp/ErpApprovalsPage';
+import ErpTeamPage from './pages/erp/ErpTeamPage';
+import ErpPnlPage from './pages/erp/ErpPnlPage';
+import ErpReportsPage from './pages/erp/ErpReportsPage';
+import ErpResourcesPage from './pages/erp/ErpResourcesPage';
 
-const PAGES = ['dashboard', 'tasks', 'projects', 'sprints', 'workflows', 'team', 'organization', 'team-settings', 'teamspace-control', 'profile'];
+const PAGES = ['dashboard', 'tasks', 'projects', 'sprints', 'workflows', 'team', 'organization', 'team-settings', 'teamspace-control', 'profile', 'timesheet', 'approvals', 'erp-team', 'pnl', 'erp-reports', 'erp-resources'];
 const pageFromHash = () => {
   const p = window.location.hash.replace(/^#\/?/, '');
   return PAGES.includes(p) ? p : 'dashboard';
@@ -61,6 +67,12 @@ function AppContent() {
         {activePage === 'team-settings'      && <TeamSettingsPage />}
         {activePage === 'teamspace-control'  && <TeamspaceControlPage />}
         {activePage === 'profile'            && <ProfilePage />}
+        {activePage === 'timesheet'     && <ErpTimesheetPage />}
+        {activePage === 'approvals'     && <ErpApprovalsPage />}
+        {activePage === 'erp-team'      && <ErpTeamPage />}
+        {activePage === 'pnl'           && <ErpPnlPage />}
+        {activePage === 'erp-reports'   && <ErpReportsPage />}
+        {activePage === 'erp-resources' && <ErpResourcesPage />}
       </Layout>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>

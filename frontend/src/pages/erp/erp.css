@@ -1,0 +1,138 @@
+/* ─── ERP module: shared look for timesheets, approvals, P&L, reports, resources ─── */
+.erp-page { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.erp-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.erp-head h1 { font-size: 1.4rem; font-weight: 700; margin: 0; letter-spacing: -0.02em; color: var(--text-main); }
+.erp-head p { margin: 4px 0 0; font-size: 0.875rem; color: var(--text-secondary); max-width: 70ch; }
+.erp-head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.erp-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.erp-tab { background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 12px; font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; }
+.erp-tab:hover { color: var(--text); }
+.erp-tab.active { color: var(--text-main); border-bottom-color: var(--text-main); }
+.erp-tab .cnt { margin-left: 6px; font-size: 0.7rem; padding: 1px 6px; border-radius: 999px; background: var(--bg-hover); color: var(--text-secondary); }
+
+.erp-toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.erp-field { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+.erp-field > span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
+.erp-field .input, .erp-field select.input { min-width: 140px; padding: 6px 10px; font-size: 0.85rem; }
+.erp-field.grow { flex: 1; }
+.erp-toolbar .spacer { flex: 1; }
+.erp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.erp-chip { border: 1px solid var(--border); background: var(--bg-card); border-radius: 999px; padding: 3px 10px; font-size: 0.78rem; color: var(--text-secondary); cursor: pointer; }
+.erp-chip.on { background: var(--primary-tint); border-color: var(--primary); color: var(--primary); }
+.erp-chip.warn { background: rgba(217, 115, 13, 0.1); border-color: rgba(217, 115, 13, 0.4); color: var(--accent-orange); }
+
+.erp-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; }
+.erp-card h3 { margin: 0 0 12px; font-size: 0.95rem; font-weight: 600; }
+.erp-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.erp-card-head h3 { margin: 0; }
+
+.erp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.erp-kpi { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; }
+.erp-kpi b { display: block; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.erp-kpi span { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
+.erp-kpi.good b { color: var(--accent-green); } .erp-kpi.bad b { color: var(--accent-red); } .erp-kpi.warn b { color: var(--accent-orange); }
+
+/* Tables */
+.erp-tablewrap { overflow-x: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.erp-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.83rem; font-variant-numeric: tabular-nums; }
+.erp-table th { position: sticky; top: 0; z-index: 1; background: var(--bg-surface); text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.erp-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.erp-table tbody tr:last-child td { border-bottom: none; }
+.erp-table tbody tr:hover td { background: var(--bg-hover); }
+.erp-table .num, .erp-table th.num { text-align: right; }
+.erp-table .c { text-align: center; }
+.erp-table .dim { color: var(--text-muted); }
+.erp-table tfoot td, .erp-table tr.total td { font-weight: 600; background: var(--bg-surface); border-top: 1px solid var(--border-light); }
+.erp-table td.sticky, .erp-table th.sticky { position: sticky; left: 0; background: var(--bg-card); z-index: 2; }
+.erp-table th.sticky { z-index: 3; background: var(--bg-surface); }
+.erp-table .group th { text-align: center; border-left: 1px solid var(--border); }
+.erp-table .sub { font-size: 0.72rem; color: var(--text-muted); }
+.erp-table .name { font-weight: 500; white-space: nowrap; }
+.erp-table .clickable { cursor: pointer; }
+
+/* Status chips */
+.erp-status { display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm); font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+.erp-status.draft, .erp-status.missing, .erp-status.Pending { background: var(--bg-hover); color: var(--text-secondary); }
+.erp-status.submitted { background: rgba(217, 115, 13, 0.12); color: var(--accent-orange); }
+.erp-status.approved, .erp-status.Approved { background: rgba(46, 158, 107, 0.12); color: var(--accent-green); }
+.erp-status.rejected, .erp-status.Rejected { background: rgba(212, 76, 71, 0.12); color: var(--accent-red); }
+
+/* Heat cells */
+.heat { font-weight: 600; text-align: right; }
+.heat.pos { background: rgba(46, 158, 107, 0.16); color: var(--accent-green); }
+.heat.neg { background: rgba(212, 76, 71, 0.14); color: var(--accent-red); }
+.heat.zero { color: var(--text-muted); }
+
+/* Timesheet grid */
+.ts-grid td { padding: 5px 4px; }
+.ts-grid select.input, .ts-grid input.input { padding: 5px 8px; font-size: 0.8rem; }
+.ts-grid .cell { width: 58px; text-align: center; padding: 5px 3px; }
+.ts-grid .cell.off { background: var(--bg-surface); color: var(--text-muted); }
+.ts-grid .cell.bad { border-color: var(--accent-red); }
+.ts-grid .rem { text-align: center; font-weight: 600; white-space: nowrap; }
+.ts-grid .rem.neg { color: var(--accent-red); }
+.ts-grid .rem.pos { color: var(--accent-green); }
+.ts-grid th.day { text-align: center; }
+.ts-grid th.day small { display: block; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-secondary); }
+.ts-grid tfoot td.daytotal { text-align: center; font-weight: 700; }
+.ts-grid tfoot td.daytotal.ok { background: rgba(46, 158, 107, 0.14); color: var(--accent-green); }
+.ts-grid tfoot td.daytotal.low { background: rgba(217, 115, 13, 0.12); color: var(--accent-orange); }
+.ts-grid tfoot td.daytotal.none { background: rgba(212, 76, 71, 0.1); color: var(--accent-red); }
+.ts-grid tfoot td.daytotal.off { background: var(--bg-surface); color: var(--text-muted); }
+.ts-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+.ts-banner { padding: 10px 14px; border-radius: var(--radius-md); font-size: 0.85rem; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ts-banner.info { background: var(--primary-tint); color: var(--primary); }
+.ts-banner.ok { background: rgba(46, 158, 107, 0.1); color: var(--accent-green); }
+.ts-banner.warn { background: rgba(217, 115, 13, 0.1); color: var(--accent-orange); }
+.ts-banner.err { background: rgba(212, 76, 71, 0.1); color: var(--accent-red); }
+
+/* Compliance strip */
+.erp-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.erp-gauge { display: flex; gap: 12px; align-items: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px 12px; }
+.erp-gauge .ring { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+.erp-gauge .ring i { background: var(--bg-card); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-style: normal; }
+.erp-gauge b { display: block; font-size: 0.82rem; }
+.erp-gauge small { color: var(--text-secondary); font-size: 0.75rem; display: block; }
+.erp-gauge .weeks { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.erp-gauge .weeks button { border: 1px solid var(--border); background: none; border-radius: 4px; padding: 1px 6px; font-size: 0.7rem; color: var(--accent-red); cursor: pointer; }
+.erp-gauge .weeks button:hover { background: var(--bg-hover); }
+
+/* Modals & forms */
+.erp-modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+.erp-modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 20px 22px; box-shadow: var(--shadow-lg); }
+.erp-modal h3 { margin: 0 0 14px; font-size: 1.05rem; }
+.erp-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.erp-form .full { grid-column: 1 / -1; }
+.erp-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+.erp-form .input { padding: 7px 10px; font-size: 0.85rem; }
+.erp-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.erp-checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 12px; max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; }
+.erp-checklist label { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; color: var(--text); font-size: 0.83rem; }
+
+.erp-empty { padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.875rem; }
+.erp-hist { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.78rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px; }
+.erp-hist li b { color: var(--text); font-weight: 500; }
+.erp-note { font-size: 0.78rem; color: var(--text-muted); }
+
+/* Compliance calendar */
+.cal-cell { width: 26px; text-align: center; font-size: 0.7rem; font-weight: 600; padding: 4px 0 !important; }
+.cal-cell.P { background: rgba(46, 158, 107, 0.2); color: var(--accent-green); }
+.cal-cell.M { background: rgba(212, 76, 71, 0.18); color: var(--accent-red); }
+.cal-cell.H { background: var(--bg-surface); color: var(--text-muted); }
+
+/* Hierarchy tree */
+.org-tree { list-style: none; padding-left: 0; margin: 0; }
+.org-tree ul { list-style: none; padding-left: 22px; margin: 4px 0 0; border-left: 1px solid var(--border); }
+.org-node { display: inline-flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); margin: 3px 0; }
+.org-node b { font-size: 0.83rem; font-weight: 600; display: block; }
+.org-node small { color: var(--text-secondary); font-size: 0.72rem; }
+
+/* Approval cards */
+.appr-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.appr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.appr-head .who { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.appr-head .meta { color: var(--text-secondary); font-size: 0.8rem; }
+.appr-head .acts { margin-left: auto; display: flex; gap: 6px; }
+
+@media (max-width: 720px) { .erp-toolbar { flex-direction: column; align-items: stretch; } .erp-field .input { min-width: 0; } }
