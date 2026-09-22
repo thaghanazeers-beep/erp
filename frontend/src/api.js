@@ -174,3 +174,7 @@ export const erpHolidays = (year) => API.get('/erp/resources/holidays', { params
 export const erpAddHoliday = (data) => API.post('/erp/resources/holidays', data);
 export const erpDeleteHoliday = (id) => API.delete(`/erp/resources/holidays/${id}`);
 export const erpHierarchy = () => API.get('/erp/resources/hierarchy');
+
+// ─── Notion live sync (header button) ───
+export const startNotionSync = () => API.post('/notion/sync');
+export const getNotionSyncStatus = () => API.get('/notion/sync/status');

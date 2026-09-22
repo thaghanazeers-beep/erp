@@ -375,6 +375,29 @@ app.get('/api/auth/me', (req, res) => res.json(req.user));
 // ==================== ERP (timesheets, P&L, reports, resources) ====================
 app.use('/api/erp', require('./routes/erp'));
 
+// ==================== NOTION LIVE SYNC (header button) ====================
+// Runs in the background; the client polls /status. One run at a time, and a
+// short cool-down so a burst of clicks cannot hammer Notion's rate limit.
+const notionSync = require('./services/notionSync');
+const NOTION_SYNC_COOLDOWN_MS = 30 * 1000;
+app.get('/api/notion/sync/status', (req, res) => res.json(notionSync.status()));
+app.post('/api/notion/sync', async (req, res) => {
+  try {
+    const st = notionSync.status();
+    if (!st.configured) return res.status(503).json({ message: 'Notion is not configured on the server (NOTION_TOKEN / NOTION_TASKS_DB)' });
+    if (st.running) return res.status(409).json({ message: `A sync started by ${st.startedBy} is already running`, status: st });
+    if (st.finishedAt && Date.now() - new Date(st.finishedAt).getTime() < NOTION_SYNC_COOLDOWN_MS && !req.user.role.match(/Admin/)) {
+      return res.status(429).json({ message: 'Notion was synced less than a minute ago; try again shortly', status: st });
+    }
+    notionSync.runNotionSync({ startedBy: req.user.name, log: (m) => console.log(`[notion-sync] ${m}`) })
+      .then(r => console.log(`[notion-sync] done in ${Math.round(r.durationMs / 1000)}s: ${JSON.stringify(r)}`))
+      .catch(e => console.error('[notion-sync] failed:', e.message));
+    res.status(202).json({ message: 'Sync started', status: notionSync.status() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ==================== TEAMSPACE ROUTES ====================
 const TEAMSPACE_FIELDS = ['name', 'description', 'icon', 'members', 'isPersonal', 'defaultTaskFilters'];
 

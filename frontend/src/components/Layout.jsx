@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useTeamspace } from '../context/TeamspaceContext';
 import NotificationBell from './NotificationBell';
+import NotionSyncButton from './NotionSyncButton';
 import MayvelLogo from './MayvelLogo';
 import { getTeamspaces, createTeamspace } from '../api';
 import './Layout.css';
@@ -270,6 +271,7 @@ export default function Layout({ children, activePage, onNavigate, onToast }) {
             <h2 className="page-title">{pageTitles[activePage] || ''}</h2>
           </div>
           <div className="header-right">
+            <NotionSyncButton onToast={onToast} />
             <NotificationBell onToast={onToast} />
             <span className="header-user-name">{user?.name}</span>
             <span className={`badge ${user?.role === 'Admin' ? 'badge-admin' : 'badge-member'}`}>{user?.role}</span>

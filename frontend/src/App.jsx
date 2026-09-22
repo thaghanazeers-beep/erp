@@ -33,6 +33,8 @@ function AppContent() {
   // (or browser back/forward) lands on the same page instead of the dashboard.
   const [activePage, setActivePage] = useState(pageFromHash);
   const { toasts, addToast, removeToast } = useToast();
+  // Bumped when a Notion sync finishes: remounts the open page so it reloads its data.
+  const [dataVersion, setDataVersion] = useState(0);
 
   const navigate = (page) => {
     if (!PAGES.includes(page)) return;
@@ -47,6 +49,12 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    const onSynced = () => setDataVersion(v => v + 1);
+    window.addEventListener('NOTION_SYNCED', onSynced);
+    return () => window.removeEventListener('NOTION_SYNCED', onSynced);
+  }, []);
+
+  useEffect(() => {
     const handleNav = () => navigate('tasks');
     window.addEventListener('NAVIGATE_TO_TASK', handleNav);
     return () => window.removeEventListener('NAVIGATE_TO_TASK', handleNav);
@@ -57,6 +65,7 @@ function AppContent() {
   return (
     <>
       <Layout activePage={activePage} onNavigate={navigate} onToast={addToast}>
+        <div key={dataVersion} style={{ display: 'contents' }}>
         {activePage === 'dashboard' && <DashboardPage />}
         {activePage === 'tasks'     && <TasksPage />}
         {activePage === 'projects'  && <ProjectsPage />}
@@ -73,6 +82,7 @@ function AppContent() {
         {activePage === 'pnl'           && <ErpPnlPage />}
         {activePage === 'erp-reports'   && <ErpReportsPage />}
         {activePage === 'erp-resources' && <ErpResourcesPage />}
+        </div>
       </Layout>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
