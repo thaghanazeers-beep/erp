@@ -20,8 +20,9 @@ import ErpTeamPage from './pages/erp/ErpTeamPage';
 import ErpPnlPage from './pages/erp/ErpPnlPage';
 import ErpReportsPage from './pages/erp/ErpReportsPage';
 import ErpResourcesPage from './pages/erp/ErpResourcesPage';
+import ErpKpiPage from './pages/erp/ErpKpiPage';
 
-const PAGES = ['dashboard', 'tasks', 'projects', 'sprints', 'workflows', 'team', 'organization', 'team-settings', 'teamspace-control', 'profile', 'timesheet', 'approvals', 'erp-team', 'pnl', 'erp-reports', 'erp-resources'];
+const PAGES = ['dashboard', 'tasks', 'projects', 'sprints', 'workflows', 'team', 'organization', 'team-settings', 'teamspace-control', 'profile', 'timesheet', 'approvals', 'erp-team', 'pnl', 'erp-reports', 'erp-resources', 'erp-kpi'];
 const pageFromHash = () => {
   const p = window.location.hash.replace(/^#\/?/, '');
   return PAGES.includes(p) ? p : 'dashboard';
@@ -82,6 +83,7 @@ function AppContent() {
         {activePage === 'pnl'           && <ErpPnlPage />}
         {activePage === 'erp-reports'   && <ErpReportsPage />}
         {activePage === 'erp-resources' && <ErpResourcesPage />}
+        {activePage === 'erp-kpi'       && <ErpKpiPage />}
         </div>
       </Layout>
       <ToastContainer toasts={toasts} onRemove={removeToast} />

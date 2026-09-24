@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Project = require('../models/Project');
 const Sprint = require('../models/Sprint');
 const OrgChart = require('../models/OrgChart');
+const { Task } = require('../models/Task');
 const Notification = require('../models/Notification');
 const { Timesheet, ResourceCost, PlannedCost, BudgetRequest, Expense, Allocation, Holiday } = require('../models/Erp');
 
@@ -644,6 +645,102 @@ router.get('/resources/hierarchy', async (req, res) => {
     const byId = Object.fromEntries(chart.nodes.map(n => [n.id, n]));
     const build = (id, depth = 0) => { const n = byId[id]; if (!n || depth > 12) return null; return { id: n.id, name: n.name, role: n.orgRole, department: n.department, memberId: n.memberId, avatar: pic[n.memberId] || null, children: (childMap[id] || []).map(c => build(c, depth + 1)).filter(Boolean) }; };
     res.json({ roots: chart.nodes.filter(n => !hasParent.has(n.id)).map(n => build(n.id)).filter(Boolean) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Employee KPI dashboard
+// ═════════════════════════════════════════════════════════════════════════════
+const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : null);
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const KPI_WEIGHTS = { delivery: 0.25, compliance: 0.2, submission: 0.15, utilisation: 0.15, accuracy: 0.15, quality: 0.1 };
+const gradeOf = (s) => (s == null ? '—' : s >= 85 ? 'A' : s >= 70 ? 'B' : s >= 50 ? 'C' : 'D');
+
+/**
+ * Per-person KPIs for a period: delivery (tasks), discipline (timesheets),
+ * utilisation (hours vs capacity and plan) and a weighted score.
+ *   scope=me | team (me + my reports, default) | all (admin)
+ */
+router.get('/kpi', async (req, res) => {
+  try {
+    const today = todayIso();
+    const from = str(req.query.from) || today.slice(0, 8) + '01';
+    const to = str(req.query.to) || today;
+    const upto = to < today ? to : today;
+    const scope = str(req.query.scope) || 'team';
+    let people = scope === 'me' ? [uid(req.user)] : [uid(req.user), ...(await reportsOf(req.user))];
+    if (scope === 'all' && isAdmin(req.user)) people = (await User.find({ active: { $ne: false } }, '_id')).map(uid);
+    people = [...new Set(people)];
+    const users = await User.find({ _id: { $in: people } }, 'name aliases profilePictureUrl');
+    const nameToUid = new Map();
+    users.forEach(u => { nameToUid.set(u.name.trim().toLowerCase(), uid(u)); (u.aliases || []).forEach(a => nameToUid.set(String(a).trim().toLowerCase(), uid(u))); });
+    const ownerOf = (assignee) => nameToUid.get(String(assignee || '').split(',')[0].trim().toLowerCase());
+
+    const holidays = new Set((await Holiday.find({})).map(h => h.date));
+    let workingDays = 0; for (let d = fromIso(from); iso(d) <= upto; d = addDays(d, 1)) { const dow = d.getDay(); if (dow !== 0 && dow !== 6 && !holidays.has(iso(d))) workingDays++; }
+    const capacityMinutes = workingDays * 8 * 60;
+
+    const tasks = await Task.find({ assignee: { $in: [...nameToUid.keys()].map(n => new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(,|$)', 'i')) } }, 'assignee status dueDate completedAt createdDate estimatedHours actualHours priority');
+    const sheets = await Timesheet.find({ userId: { $in: people }, days: { $elemMatch: { $gte: from, $lte: to } } });
+    const projects = await Project.find({}, 'billable'); const billable = Object.fromEntries(projects.map(p => [p._id.toString(), p.billable !== false]));
+    const months = monthsBetween(from, to);
+    const planned = await PlannedCost.find({ userId: { $in: people }, month: { $in: months } });
+    // weeks that ended inside the period (and before today) → submission discipline
+    const dueWeeks = []; for (let y = Number(from.slice(0, 4)); y <= Number(upto.slice(0, 4)); y++) weeksOf(y).forEach(w => { if (w.end >= from && w.end <= upto) dueWeeks.push({ year: y, week: w.n, end: w.end }); });
+    const recent = recentWeeks(8);
+    const recentSheets = await Timesheet.find({ userId: { $in: people }, $or: recent.map(w => ({ year: w.year, week: w.week })) }, 'userId year week rows');
+
+    const rows = users.map(u => {
+      const id = uid(u);
+      const mine = tasks.filter(t => ownerOf(t.assignee) === id);
+      const doneDate = (t) => (t.completedAt || t.dueDate || t.createdDate) ? iso(new Date(t.completedAt || t.dueDate || t.createdDate)) : null;
+      const completed = mine.filter(t => t.status === 'Completed' && doneDate(t) >= from && doneDate(t) <= to);
+      const rejected = mine.filter(t => t.status === 'Rejected' && doneDate(t) >= from && doneDate(t) <= to);
+      const open = mine.filter(t => !['Completed', 'Rejected'].includes(t.status));
+      const overdue = open.filter(t => t.dueDate && iso(new Date(t.dueDate)) < today);
+      const inReview = open.filter(t => t.status === 'In Review').length;
+      // Only tasks with a completion stamp can be judged on time; legacy tasks (no stamp) are excluded from this KPI.
+      const withDue = completed.filter(t => t.dueDate && t.completedAt);
+      const onTime = withDue.filter(t => iso(new Date(t.completedAt)) <= iso(new Date(t.dueDate))).length;
+      const tracked = completed.filter(t => t.completedAt).length;
+      const est = completed.filter(t => t.estimatedHours > 0 && t.actualHours > 0);
+      const estSum = est.reduce((a, t) => a + t.estimatedHours, 0); const actSum = est.reduce((a, t) => a + t.actualHours, 0);
+      const ratio = est.length ? actSum / estSum : null;
+
+      const my = sheets.filter(s => s.userId === id && s.status !== 'rejected');
+      let logged = 0, billableMin = 0, approvedMin = 0; const daysLogged = new Set();
+      my.forEach(s => s.rows.forEach(r => r.minutes.forEach((m, i) => { const d = s.days[i]; if (!m || d < from || d > to) return; logged += m; if (billable[r.projectId] !== false) billableMin += m; if (s.status === 'approved') approvedMin += m; daysLogged.add(d); })));
+      let present = 0; daysLogged.forEach(d => { if (d <= upto) present++; });
+      const submittedWeeks = dueWeeks.filter(w => my.some(s => s.year === w.year && s.week === w.week && ['submitted', 'approved'].includes(s.status)));
+      const promptWeeks = submittedWeeks.filter(w => { const s = my.find(x => x.year === w.year && x.week === w.week); return s?.submittedAt && iso(new Date(s.submittedAt)) <= iso(addDays(fromIso(w.end), 3)); });
+      const decided = sheets.filter(s => s.userId === id && ['approved', 'rejected'].includes(s.status));
+      const plannedHours = planned.filter(p => p.userId === id).reduce((a, p) => a + p.billableHours + p.nonBillableHours, 0);
+      const weekly = recent.map(w => { const s = recentSheets.find(x => x.userId === id && x.year === w.year && x.week === w.week); return { week: w.week, range: w.range, minutes: s ? sum(s.rows.map(r => sum(r.minutes))) : 0 }; });
+
+      const k = {
+        delivery: pct(onTime, withDue.length),
+        compliance: pct(present, workingDays),
+        submission: pct(promptWeeks.length, dueWeeks.length),
+        utilisation: capacityMinutes ? clamp(Math.round((logged / capacityMinutes) * 100), 0, 100) : null,
+        accuracy: ratio == null ? null : clamp(Math.round(100 - Math.abs(1 - ratio) * 100), 0, 100),
+        quality: pct(completed.length, completed.length + rejected.length),
+      };
+      let wsum = 0, acc = 0; Object.entries(KPI_WEIGHTS).forEach(([key, w]) => { if (k[key] != null) { wsum += w; acc += w * k[key]; } });
+      const score = wsum ? Math.round(acc / wsum) : null;
+      return {
+        userId: id, name: u.name, avatar: u.profilePictureUrl || null, score, grade: gradeOf(score), components: k,
+        tasks: { completed: completed.length, onTime, withDue: withDue.length, tracked, open: open.length, overdue: overdue.length, inReview, rejected: rejected.length, estimatedHours: estSum, actualHours: actSum, ratio },
+        time: { loggedMinutes: logged, billableMinutes: billableMin, approvedMinutes: approvedMin, billablePct: pct(billableMin, logged), presentDays: present, workingDays, capacityMinutes, submittedWeeks: submittedWeeks.length, promptWeeks: promptWeeks.length, dueWeeks: dueWeeks.length, approvedSheets: decided.filter(s => s.status === 'approved').length, rejectedSheets: decided.filter(s => s.status === 'rejected').length, plannedHours, planUsedPct: plannedHours ? Math.round((logged / 60 / plannedHours) * 100) : null },
+        weekly,
+      };
+    }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));
+
+    const avg = (arr) => { const v = arr.filter(x => x != null); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+    res.json({
+      from, to, workingDays, scope, weights: KPI_WEIGHTS,
+      team: { people: rows.length, avgScore: avg(rows.map(r => r.score)), onTime: pct(rows.reduce((a, r) => a + r.tasks.onTime, 0), rows.reduce((a, r) => a + r.tasks.withDue, 0)), completed: rows.reduce((a, r) => a + r.tasks.completed, 0), overdue: rows.reduce((a, r) => a + r.tasks.overdue, 0), loggedMinutes: rows.reduce((a, r) => a + r.time.loggedMinutes, 0), compliance: avg(rows.map(r => r.components.compliance)), utilisation: avg(rows.map(r => r.components.utilisation)), billablePct: pct(rows.reduce((a, r) => a + r.time.billableMinutes, 0), rows.reduce((a, r) => a + r.time.loggedMinutes, 0)) },
+      rows,
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

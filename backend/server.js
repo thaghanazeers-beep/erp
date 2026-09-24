@@ -926,6 +926,9 @@ app.put('/api/tasks/:id', async (req, res) => {
       return res.status(403).json({ message: 'Only an Admin or Team Owner can approve a task in review' });
     }
 
+    // Completion stamp for the employee KPI dashboard (on-time delivery).
+    if (updates.status === 'Completed' && oldTask.status !== 'Completed') updates.completedAt = new Date();
+    else if (updates.status && updates.status !== 'Completed' && oldTask.status === 'Completed') updates.completedAt = null;
     const task = await Task.findOneAndUpdate({ id: req.params.id }, updates, { new: true, runValidators: true });
     if (!task) return res.status(404).json({ message: 'Task not found' });
 

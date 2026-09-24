@@ -54,6 +54,7 @@ const taskSchema = new mongoose.Schema({
   taskType:       { type: [String], default: [] }, // doubles as the task's tags
   comments:       [commentSchema],
   updatedBy:      { type: String },
+  completedAt:    { type: Date },   // stamped when status becomes Completed (drives on-time KPIs)
   teamspaceId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Teamspace' },
   // child tasks are fetched by finding tasks with `parentId` === this task's id
 });

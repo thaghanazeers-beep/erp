@@ -178,3 +178,4 @@ export const erpHierarchy = () => API.get('/erp/resources/hierarchy');
 // ─── Notion live sync (header button) ───
 export const startNotionSync = () => API.post('/notion/sync');
 export const getNotionSyncStatus = () => API.get('/notion/sync/status');
+export const erpKpi = (params) => API.get('/erp/kpi', { params });
