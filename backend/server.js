@@ -204,11 +204,12 @@ async function getAttachmentFile(key) {
   const contentType = upstream.headers.get('content-type') || ATTACHMENT_MIME[path.extname(key).toLowerCase()];
   const contentLength = Number(upstream.headers.get('content-length')) || undefined;
 
-  // Write-back is opt-in: with 625 MB of Notion files, silently copying them into
-  // a small backend (e.g. GridFS on a 512 MB Atlas tier) could exhaust it and
-  // block all writes. Notion remains the source of truth unless explicitly enabled.
-  const writeBack = process.env.ATTACHMENT_WRITEBACK === 'true' && fileStore.isConfigured();
-  if (writeBack && contentLength && contentLength <= 25 * 1024 * 1024) {
+  // Copy-to-storage is ON whenever a durable backend is configured (opt out with
+  // ATTACHMENT_WRITEBACK=false), so each Notion file is fetched once and every
+  // later preview is served from our own storage instead of Notion's expiring links.
+  const writeBack = process.env.ATTACHMENT_WRITEBACK !== 'false' && fileStore.isConfigured();
+  const maxBytes = Number(process.env.ATTACHMENT_WRITEBACK_MAX_MB || 25) * 1024 * 1024;
+  if (writeBack && contentLength && contentLength <= maxBytes) {
     const buffer = Buffer.from(await upstream.arrayBuffer());
     try { await fileStore.putFile(`attachments/${key}`, buffer, contentType); }
     catch (err) { console.warn(`Write-back to storage failed for ${key}: ${err.message}`); }
@@ -248,7 +249,7 @@ app.get('/files/att-preview/:key', async (req, res) => {
     res.setHeader('Content-Type', mime);
     if (f.contentLength) res.setHeader('Content-Length', f.contentLength);
     res.setHeader('Content-Disposition', 'inline');
-    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Cache-Control', 'private, max-age=21600, immutable');
     f.body.pipe(res);
   } catch {
     res.status(500).end();
@@ -1064,7 +1065,10 @@ app.get('/api/files/attachments/:key/signed-url', async (req, res) => {
     if (!/^[a-f0-9]{32}\.[a-z0-9]{2,5}$/.test(req.params.key)) {
       return res.status(400).json({ message: 'Bad key' });
     }
-    const exp = Math.floor(Date.now() / 1000) + 3600;
+    // Expiry snaps to 6h buckets so the URL is identical for every request in a
+    // bucket — that lets the browser cache the file (cache is keyed on full URL).
+    const BUCKET = 6 * 3600;
+    const exp = (Math.floor(Date.now() / 1000 / BUCKET) + 1) * BUCKET + 3600;
     const sig = signPreviewToken(req.params.key, exp);
     const base = process.env.SERVER_URL || `${req.protocol}://${req.get('host')}`;
     res.json({ url: `${base}/files/att-preview/${req.params.key}?exp=${exp}&sig=${sig}`, expiresAt: exp });
