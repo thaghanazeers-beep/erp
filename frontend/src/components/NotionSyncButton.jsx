@@ -12,6 +12,7 @@ const summary = (r) => {
   if (!r) return '';
   const parts = [`${r.tasks?.upserted ?? 0} tasks updated`];
   if (r.sprints) parts.push(`${r.sprints.created + r.sprints.adopted} sprints, ${r.sprints.linked} tasks linked`);
+  if (r.attachments) parts.push(`${r.attachments.added} new attachments${r.attachments.blockPagesRemaining ? ` (${r.attachments.blockPagesRemaining} pages still to scan, sync again)` : ''}`);
   return parts.join(' · ');
 };
 
@@ -31,7 +32,7 @@ export default function NotionSyncButton({ onToast }) {
       if (wasRunning.current && !s.running) {
         wasRunning.current = false;
         if (s.error) onToast?.({ type: 'task_rejected', title: 'Notion sync failed', message: s.error });
-        else { onToast?.({ type: 'task_completed', title: 'Notion data is up to date', message: summary(s.result) }); window.dispatchEvent(new CustomEvent('NOTION_SYNCED', { detail: s.result })); }
+        else { const errs = s.result?.errors ? Object.entries(s.result.errors).map(([k, v]) => `${k}: ${v}`).join('; ') : ''; onToast?.({ type: errs ? 'review_requested' : 'task_completed', title: errs ? 'Notion sync finished with warnings' : 'Notion data is up to date', message: summary(s.result) + (errs ? ` · ${errs}` : '') }); window.dispatchEvent(new CustomEvent('NOTION_SYNCED', { detail: s.result })); }
       }
       if (s.running) { wasRunning.current = true; timer.current = setTimeout(poll, 1500); }
     } catch { /* offline; try again on next click */ }
@@ -42,7 +43,7 @@ export default function NotionSyncButton({ onToast }) {
     if (st?.running) return;
     try {
       const r = await startNotionSync(); setSt(r.data.status); wasRunning.current = true;
-      onToast?.({ type: 'status_changed', title: 'Syncing with Notion', message: 'Pulling the latest tasks and sprints. This takes a moment.' });
+      onToast?.({ type: 'status_changed', title: 'Syncing with Notion', message: 'Pulling the latest tasks, sprints and attachments. This takes a few minutes.' });
       clearTimeout(timer.current); timer.current = setTimeout(poll, 1500);
     } catch (e) {
       const msg = e?.response?.data?.message || e?.response?.data?.error || 'Could not start the sync';

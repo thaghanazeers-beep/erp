@@ -55,6 +55,8 @@ const taskSchema = new mongoose.Schema({
   comments:       [commentSchema],
   updatedBy:      { type: String },
   completedAt:    { type: Date },   // stamped when status becomes Completed (drives on-time KPIs)
+  notionLastEdited:     { type: Date }, // Notion page last_edited_time at last sync
+  notionFilesScannedAt: { type: Date }, // when the page's blocks were last scanned for attachments
   teamspaceId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Teamspace' },
   // child tasks are fetched by finding tasks with `parentId` === this task's id
 });
