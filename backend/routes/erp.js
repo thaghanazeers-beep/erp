@@ -23,7 +23,13 @@ const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate(
 const fromIso = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const monthOf = (s) => s.slice(0, 7);
-const todayIso = () => iso(new Date());
+// The business runs on India time. A UTC server would otherwise roll the date over
+// at 05:30 IST and shift weeks, compliance days and KPIs by up to a day.
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+const istIso = (v) => new Date(new Date(v).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+const todayIso = () => istIso(Date.now());
+const thisYear = () => Number(todayIso().slice(0, 4));
+const thisMonth = () => Number(todayIso().slice(5, 7));
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fmtDay = (s) => { const d = fromIso(s); return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`; };
 
@@ -112,6 +118,9 @@ async function canSeeMoney(user) {
   if (await Project.exists({ managerId: uid(user) })) return true;
   return (await reportsOf(user)).length > 0;
 }
+const isFinanceAdmin = (u) => isAdmin(u) || u.role === 'Team Owner';
+/** Admin / Team Owner, or the manager of this specific project. */
+const canManageProject = (u, p) => isFinanceAdmin(u) || (!!p?.managerId && p.managerId === uid(u));
 async function nameMap() {
   const users = await User.find({}, 'name');
   return Object.fromEntries(users.map(u => [uid(u), u.name]));
@@ -125,6 +134,7 @@ async function rateBook() {
   return {
     /** hourly rate in force on a date (daily ÷ 8) */
     hourly(userId, dateIso) { const list = byUser[userId] || []; let hit = null; for (const r of list) { if (r.effectiveDate <= dateIso) hit = r; else break; } return hit ? hit.dailyCost / 8 : 0; },
+    has(userId) { return !!(byUser[userId] || []).length; },
     type(userId) { const list = byUser[userId] || []; return list.length ? list[list.length - 1].resourceType : ''; },
     daily(userId, dateIso) { return this.hourly(userId, dateIso) * 8; },
   };
@@ -161,7 +171,7 @@ router.get('/me', async (req, res) => {
 });
 
 router.get('/weeks', (req, res) => {
-  const year = num(req.query.year, new Date().getFullYear());
+  const year = num(req.query.year, thisYear());
   res.json(weeksOf(year));
 });
 
@@ -209,7 +219,8 @@ router.get('/projects', async (req, res) => {
     const all = await Project.find({}).sort({ name: 1 });
     const budgets = await budgetsFor(all.map(p => p._id.toString()));
     const names = await nameMap();
-    res.json(all.map(p => ({ ...p.toObject(), budgetApproved: budgets[p._id.toString()] || 0, managerName: names[p.managerId] || '', memberNames: (p.memberIds || []).map(id => names[id]).filter(Boolean) })));
+    const money = await canSeeMoney(req.user);
+    res.json(all.map(p => ({ ...p.toObject(), budget: money ? p.budget : undefined, budgetApproved: money ? (budgets[p._id.toString()] || 0) : undefined, managerName: names[p.managerId] || '', memberNames: (p.memberIds || []).map(id => names[id]).filter(Boolean) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 router.put('/projects/:id', async (req, res) => {
@@ -256,7 +267,7 @@ async function remainingByProject(userId, dateIso) {
 
 router.get('/timesheet', async (req, res) => {
   try {
-    const year = num(req.query.year, new Date().getFullYear()); const week = num(req.query.week, weekFor(todayIso()).week);
+    const year = num(req.query.year, thisYear()); const week = num(req.query.week, weekFor(todayIso()).week);
     let userId = str(req.query.userId) || uid(req.user);
     if (userId !== uid(req.user) && !(await reportsOf(req.user)).includes(userId)) return res.status(403).json({ message: 'Not your report' });
     const target = await User.findById(userId);
@@ -271,10 +282,26 @@ router.get('/timesheet', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-const cleanRows = (rows) => (Array.isArray(rows) ? rows : []).filter(r => r && r.projectId).map(r => ({
+const cleanRowsRaw = (rows) => (Array.isArray(rows) ? rows : []).filter(r => r && r.projectId).map(r => ({
   projectId: String(r.projectId), sprintId: r.sprintId ? String(r.sprintId) : '', category: r.category ? String(r.category).slice(0, 80) : '',
   minutes: Array.from({ length: 7 }, (_, i) => Math.max(0, Math.min(24 * 60, Math.round(num(r.minutes?.[i]))))),
 }));
+
+/** Clean rows, then check the user may book to each project, sprints belong to their project, and no day exceeds 24 h. */
+async function validateRows(userId, rows) {
+  const clean = cleanRowsRaw(rows);
+  const target = await User.findById(userId);
+  const allowed = await projectsForUser(target || { _id: userId, role: 'Member' });
+  const ids = new Set(allowed.map(p => p._id.toString()));
+  const sprintList = await Sprint.find({ _id: { $in: clean.map(r => r.sprintId).filter(x => /^[a-f0-9]{24}$/.test(x)) } }, 'projectId');
+  const sprintProject = Object.fromEntries(sprintList.map(x => [x._id.toString(), x.projectId]));
+  for (const r of clean) {
+    if (!ids.has(r.projectId)) return { error: 'You can only book time to projects you are a member of' };
+    if (r.sprintId && sprintProject[r.sprintId] !== r.projectId) return { error: 'A selected sprint does not belong to its project' };
+  }
+  for (let i = 0; i < 7; i++) if (clean.reduce((a, r) => a + r.minutes[i], 0) > 24 * 60) return { error: 'A single day cannot add up to more than 24 hours' };
+  return { rows: clean };
+}
 
 router.put('/timesheet', async (req, res) => {
   try {
@@ -283,9 +310,11 @@ router.put('/timesheet', async (req, res) => {
     if (userId !== uid(req.user) && !isAdmin(req.user)) return res.status(403).json({ message: 'You can only edit your own timesheet' });
     const { sheet } = await loadOrBlank(userId, year, week);
     if (['submitted', 'approved'].includes(sheet.status) && !isAdmin(req.user)) return res.status(409).json({ message: `This week is ${sheet.status}; ask your manager to reopen it.` });
-    sheet.rows = cleanRows(req.body.rows);
+    const v = await validateRows(userId, req.body.rows); if (v.error) return res.status(400).json({ message: v.error });
+    const lockedEdit = ['submitted', 'approved'].includes(sheet.status);
+    sheet.rows = v.rows;
     if (sheet.status === 'rejected') sheet.status = 'draft';
-    sheet.history.push({ by: req.user.name, action: 'saved' });
+    sheet.history.push({ by: req.user.name, action: 'saved', note: lockedEdit ? `admin edit while ${sheet.status}` : '' });
     await sheet.save();
     res.json(sheet);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -295,14 +324,14 @@ router.post('/timesheet/submit', async (req, res) => {
   try {
     const year = num(req.body.year); const week = num(req.body.week); const userId = uid(req.user);
     const { sheet, w } = await loadOrBlank(userId, year, week);
-    if (req.body.rows) sheet.rows = cleanRows(req.body.rows);
     if (['submitted', 'approved'].includes(sheet.status)) return res.status(409).json({ message: `Already ${sheet.status}` });
+    if (req.body.rows) { const v = await validateRows(userId, req.body.rows); if (v.error) return res.status(400).json({ message: v.error }); sheet.rows = v.rows; }
     const total = sum(sheet.rows.map(r => sum(r.minutes)));
     if (!total) return res.status(400).json({ message: 'Add some hours before submitting' });
     sheet.status = 'submitted'; sheet.submittedAt = new Date(); sheet.history.push({ by: req.user.name, action: 'submitted' });
     await sheet.save();
     const approvers = await approversOf(userId); const names = await nameMap();
-    for (const a of approvers) {
+    for (const a of approvers.filter(a => names[a])) {
       await Notification.create({ userId: names[a], actorName: req.user.name, type: 'timesheet_submitted', title: 'Timesheet awaiting approval', message: `${req.user.name} submitted week ${week} (${w.range})` }).catch(() => {});
     }
     res.json(sheet);
@@ -346,7 +375,7 @@ router.post('/timesheet/:id/reopen', (req, res) => decide(req, res, 'reopen'));
 /** Sheets from my reports for a week (any status), with pending weeks list. */
 router.get('/approvals', async (req, res) => {
   try {
-    const year = num(req.query.year, new Date().getFullYear()); const week = num(req.query.week, weekFor(todayIso()).week);
+    const year = num(req.query.year, thisYear()); const week = num(req.query.week, weekFor(todayIso()).week);
     const reports = await reportsOf(req.user); const names = await nameMap();
     const projects = await Project.find({}, 'name'); const pn = Object.fromEntries(projects.map(p => [p._id.toString(), p.name]));
     const sprints = await Sprint.find({}, 'name'); const sn = Object.fromEntries(sprints.map(s => [s._id.toString(), s.name]));
@@ -440,6 +469,8 @@ async function computePl(projectIds, from, to) {
     p.toBeSpentTotal = p.totals.toBeSpent.cost + p.expenses['To Be Spent'];
     p.projected = p.actualSpent + p.toBeSpentTotal;
     p.pl = p.budget - p.projected; p.plPct = p.budget ? (p.pl / p.budget) * 100 : 0;
+    // People with planned/actual hours but no rate: their cost is counted as ₹0, so P&L is overstated.
+    p.missingRates = p.users.filter(u => !rates.has(u.userId) && (u.totals.planned.hours + u.totals.actual.hours) > 0).map(u => u.name);
   });
   return { months, out };
 }
@@ -454,7 +485,7 @@ router.get('/pl/summary', async (req, res) => {
     if (statuses?.length) projects = projects.filter(p => statuses.includes(p.status || 'Active'));
     const ids = projects.map(p => p._id.toString());
     const { out } = await computePl(ids, from, to);
-    res.json({ from, to, rows: projects.map(p => { const r = out[p._id.toString()]; return { projectId: p._id, name: p.name, type: p.type || 'Others', status: p.status || 'Active', budget: r.budget, actualSpent: r.actualSpent, toBeSpent: r.toBeSpentTotal, projected: r.projected, pl: r.pl, plPct: r.plPct, hours: r.totals.actual.hours }; }) });
+    res.json({ from, to, rows: projects.map(p => { const r = out[p._id.toString()]; return { projectId: p._id, name: p.name, type: p.type || 'Others', status: p.status || 'Active', budget: r.budget, actualSpent: r.actualSpent, toBeSpent: r.toBeSpentTotal, projected: r.projected, pl: r.pl, plPct: r.plPct, hours: r.totals.actual.hours, missingRates: r.missingRates }; }), missingRateNames: [...new Set(projects.flatMap(p => out[p._id.toString()].missingRates))].sort() });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -502,15 +533,20 @@ router.put('/pl/planned/:projectId', async (req, res) => {
 
 // Budget requests
 router.get('/pl/budget/:projectId', async (req, res) => {
-  try { res.json(await BudgetRequest.find({ projectId: req.params.projectId }).sort({ requestDate: 1 })); } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    if (!(await canSeeMoney(req.user))) return res.status(403).json({ message: 'Budgets are limited to managers and admins' });
+    res.json(await BudgetRequest.find({ projectId: req.params.projectId }).sort({ requestDate: 1 }));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 router.post('/pl/budget/:projectId', async (req, res) => {
   try {
     const p = await Project.findById(req.params.projectId); if (!p) return res.status(404).json({ message: 'Project not found' });
+    if (!canManageProject(req.user, p)) return res.status(403).json({ message: 'Only the project manager or an admin can request budget' });
+    if (!(num(req.body.cost) > 0)) return res.status(400).json({ message: 'Enter a budget amount greater than zero' });
     const r = new BudgetRequest({ ...pick(req.body, ['requestDate', 'cost', 'startDate', 'endDate', 'reason', 'remarks']), projectId: p._id.toString(), requestedBy: req.user.name, history: [{ by: req.user.name, action: 'submitted' }] });
     await r.save();
     const approvers = p.managerId ? await approversOf(p.managerId) : []; const names = await nameMap();
-    for (const a of approvers) await Notification.create({ userId: names[a], actorName: req.user.name, type: 'budget_request', title: 'Budget request to approve', message: `${req.user.name} requested ₹${r.cost} for ${p.name}` }).catch(() => {});
+    for (const a of approvers.filter(a => names[a])) await Notification.create({ userId: names[a], actorName: req.user.name, type: 'budget_request', title: 'Budget request to approve', message: `${req.user.name} requested ₹${r.cost} for ${p.name}` }).catch(() => {});
     res.status(201).json(r);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -518,8 +554,11 @@ router.post('/pl/budget/:id/decide', async (req, res) => {
   try {
     if (!(await canSeeMoney(req.user))) return res.status(403).json({ message: 'Only managers and admins can approve budgets' });
     const r = await BudgetRequest.findById(req.params.id); if (!r) return res.status(404).json({ message: 'Request not found' });
+    const proj = await Project.findById(r.projectId);
+    if (!isFinanceAdmin(req.user) && !(req.body.stage !== 'financial' && proj?.managerId === uid(req.user))) return res.status(403).json({ message: 'You are not an approver for this project' });
     const stage = req.body.stage === 'financial' ? 'financialApproval' : 'projectApproval'; const decision = req.body.decision === 'Rejected' ? 'Rejected' : 'Approved';
     if (stage === 'financialApproval' && !isAdmin(req.user) && req.user.role !== 'Team Owner') return res.status(403).json({ message: 'Financial approval is for admins' });
+    if (r.requestedBy === req.user.name && !isAdmin(req.user)) return res.status(403).json({ message: 'You cannot approve your own budget request' });
     r[stage] = decision; r.history.push({ by: req.user.name, action: `${stage === 'projectApproval' ? 'project' : 'financial'} ${decision.toLowerCase()}`, note: str(req.body.note) || '' });
     if (stage === 'projectApproval' && decision === 'Approved' && r.financialApproval === 'Pending' && isAdmin(req.user)) { r.financialApproval = 'Approved'; r.history.push({ by: 'System', action: 'financial approved', note: 'auto-approved: admin approval covers both levels' }); }
     await r.save(); res.json(r);
@@ -532,6 +571,7 @@ router.delete('/pl/budget/:id', async (req, res) => {
 // Expenses
 router.get('/pl/expenses', async (req, res) => {
   try {
+    if (!(await canSeeMoney(req.user))) return res.status(403).json({ message: 'Expenses are limited to managers and admins' });
     const f = {}; if (str(req.query.projectId)) f.projectId = req.query.projectId; if (str(req.query.planType)) f.planType = req.query.planType;
     if (str(req.query.from) || str(req.query.to)) f.date = { ...(str(req.query.from) ? { $gte: req.query.from } : {}), ...(str(req.query.to) ? { $lte: req.query.to } : {}) };
     const rows = await Expense.find(f).sort({ date: -1 }); const projects = await Project.find({}, 'name'); const pn = Object.fromEntries(projects.map(p => [p._id.toString(), p.name]));
@@ -539,7 +579,12 @@ router.get('/pl/expenses', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 router.post('/pl/expenses', async (req, res) => {
-  try { const e = new Expense({ ...pick(req.body, ['projectId', 'date', 'expenseType', 'planType', 'amount', 'note']), createdBy: req.user.name }); await e.save(); res.status(201).json(e); } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const p = await Project.findById(req.body.projectId); if (!p) return res.status(404).json({ message: 'Project not found' });
+    if (!canManageProject(req.user, p)) return res.status(403).json({ message: 'Only the project manager or an admin can add expenses' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') || !(num(req.body.amount) > 0)) return res.status(400).json({ message: 'A valid date and an amount greater than zero are required' });
+    const e = new Expense({ ...pick(req.body, ['projectId', 'date', 'expenseType', 'planType', 'amount', 'note']), createdBy: req.user.name }); await e.save(); res.status(201).json(e);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 router.delete('/pl/expenses/:id', async (req, res) => {
   try { const e = await Expense.findById(req.params.id); if (!e) return res.status(404).json({ message: 'Not found' }); if (e.createdBy !== req.user.name && !isAdmin(req.user)) return res.status(403).json({ message: 'Not yours' }); await e.deleteOne(); res.json({ ok: true }); } catch (err) { res.status(500).json({ error: err.message }); }
@@ -563,7 +608,7 @@ router.get('/reports/work-done', async (req, res) => {
 
 router.get('/reports/compliance', async (req, res) => {
   try {
-    const year = num(req.query.year, new Date().getFullYear()); const month = num(req.query.month, new Date().getMonth() + 1); const ym = `${year}-${pad(month)}`;
+    const year = num(req.query.year, thisYear()); const month = num(req.query.month, thisMonth()); const ym = `${year}-${pad(month)}`;
     const names = await nameMap(); const holidays = new Set((await Holiday.find({})).map(h => h.date));
     let people = req.query.scope === 'me' ? [uid(req.user)] : await reportsOf(req.user); if (!people.length) people = [uid(req.user)];
     const daysInMonth = new Date(year, month, 0).getDate(); const days = Array.from({ length: daysInMonth }, (_, i) => `${ym}-${pad(i + 1)}`); const today = todayIso();
@@ -693,15 +738,15 @@ router.get('/kpi', async (req, res) => {
     const rows = users.map(u => {
       const id = uid(u);
       const mine = tasks.filter(t => ownerOf(t.assignee) === id);
-      const doneDate = (t) => (t.completedAt || t.dueDate || t.createdDate) ? iso(new Date(t.completedAt || t.dueDate || t.createdDate)) : null;
+      const doneDate = (t) => (t.completedAt || t.dueDate || t.createdDate) ? istIso(t.completedAt || t.dueDate || t.createdDate) : null;
       const completed = mine.filter(t => t.status === 'Completed' && doneDate(t) >= from && doneDate(t) <= to);
       const rejected = mine.filter(t => t.status === 'Rejected' && doneDate(t) >= from && doneDate(t) <= to);
       const open = mine.filter(t => !['Completed', 'Rejected'].includes(t.status));
-      const overdue = open.filter(t => t.dueDate && iso(new Date(t.dueDate)) < today);
+      const overdue = open.filter(t => t.dueDate && istIso(t.dueDate) < today);
       const inReview = open.filter(t => t.status === 'In Review').length;
       // Only tasks with a completion stamp can be judged on time; legacy tasks (no stamp) are excluded from this KPI.
       const withDue = completed.filter(t => t.dueDate && t.completedAt);
-      const onTime = withDue.filter(t => iso(new Date(t.completedAt)) <= iso(new Date(t.dueDate))).length;
+      const onTime = withDue.filter(t => istIso(t.completedAt) <= istIso(t.dueDate)).length;
       const tracked = completed.filter(t => t.completedAt).length;
       const est = completed.filter(t => t.estimatedHours > 0 && t.actualHours > 0);
       const estSum = est.reduce((a, t) => a + t.estimatedHours, 0); const actSum = est.reduce((a, t) => a + t.actualHours, 0);
@@ -712,7 +757,7 @@ router.get('/kpi', async (req, res) => {
       my.forEach(s => s.rows.forEach(r => r.minutes.forEach((m, i) => { const d = s.days[i]; if (!m || d < from || d > to) return; logged += m; if (billable[r.projectId] !== false) billableMin += m; if (s.status === 'approved') approvedMin += m; daysLogged.add(d); })));
       let present = 0; daysLogged.forEach(d => { if (d <= upto) present++; });
       const submittedWeeks = dueWeeks.filter(w => my.some(s => s.year === w.year && s.week === w.week && ['submitted', 'approved'].includes(s.status)));
-      const promptWeeks = submittedWeeks.filter(w => { const s = my.find(x => x.year === w.year && x.week === w.week); return s?.submittedAt && iso(new Date(s.submittedAt)) <= iso(addDays(fromIso(w.end), 3)); });
+      const promptWeeks = submittedWeeks.filter(w => { const s = my.find(x => x.year === w.year && x.week === w.week); return s?.submittedAt && istIso(s.submittedAt) <= iso(addDays(fromIso(w.end), 3)); });
       const decided = sheets.filter(s => s.userId === id && ['approved', 'rejected'].includes(s.status));
       const plannedHours = planned.filter(p => p.userId === id).reduce((a, p) => a + p.billableHours + p.nonBillableHours, 0);
       const weekly = recent.map(w => { const s = recentSheets.find(x => x.userId === id && x.year === w.year && x.week === w.week); return { week: w.week, range: w.range, minutes: s ? sum(s.rows.map(r => sum(r.minutes))) : 0 }; });
@@ -744,4 +789,5 @@ router.get('/kpi', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router._helpers = { weeksOf, weekFor, istIso, fyOf, monthsBetween, workingDays };
 module.exports = router;

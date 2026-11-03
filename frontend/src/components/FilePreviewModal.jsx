@@ -75,7 +75,7 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
           const status = err.response?.status;
           setError(
             status === 404
-              ? 'This file couldn't be found in storage or in Notion. It may have been deleted or moved — try re-syncing from Notion or re-uploading it.'
+              ? 'This file could not be found in storage or in Notion. It may have been deleted or moved — try re-syncing from Notion or re-uploading it.'
               : `Preview failed to load${status ? ` (HTTP ${status})` : ''}.`
           );
           setLoading(false);

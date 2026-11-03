@@ -16,8 +16,8 @@ const Heat = ({ v, pct }) => <td className={`heat ${v > 0 ? 'pos' : v < 0 ? 'neg
 function Summary({ onOpen }) {
   const fy = fyOf(); const [from, setFrom] = useState(fyRange(fy).from); const [to, setTo] = useState(fyRange(fy).to);
   const [types, setTypes] = useState(TYPES); const [statuses, setStatuses] = useState(['Active', 'In Progress']);
-  const [rows, setRows] = useState(null); const [msg, setMsg] = useState('');
-  const run = async () => { try { const r = await erpPlSummary({ from, to, types: types.join(','), statuses: statuses.join(',') }); setRows(r.data.rows); setMsg(''); } catch (e) { setMsg(errMsg(e)); } };
+  const [rows, setRows] = useState(null); const [msg, setMsg] = useState(''); const [noRate, setNoRate] = useState([]);
+  const run = async () => { try { const r = await erpPlSummary({ from, to, types: types.join(','), statuses: statuses.join(',') }); setRows(r.data.rows); setNoRate(r.data.missingRateNames || []); setMsg(''); } catch (e) { setMsg(errMsg(e)); } };
   useAsync(() => run(), []);
   const toggle = (list, set, v) => set(list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
   const tot = (k) => (rows || []).reduce((a, r) => a + r[k], 0);
@@ -33,6 +33,7 @@ function Summary({ onOpen }) {
         <button className="btn btn-ghost btn-sm" disabled={!rows} onClick={() => downloadCsv('profit-loss-summary.csv', [['Project', 'Type', 'Status', 'Budget', 'Actual spent', 'To be spent', 'Projected', 'P&L', 'P&L %', 'Hours'], ...rows.map(r => [r.name, r.type, r.status, r.budget, Math.round(r.actualSpent), Math.round(r.toBeSpent), Math.round(r.projected), Math.round(r.pl), r.plPct.toFixed(2), r.hours.toFixed(1)])])}>Export CSV</button>
       </div>
       {msg && <Banner kind="err">{msg}</Banner>}
+      {noRate.length > 0 && <Banner kind="warn">Cost is counted as ₹0 for {noRate.length} {noRate.length === 1 ? 'person' : 'people'} with no rate set ({noRate.slice(0, 5).join(', ')}{noRate.length > 5 ? '…' : ''}), so profit is overstated. Add their rates under Resources › Rate card.</Banner>}
       {rows && (
         <>
           <div className="erp-kpis">
