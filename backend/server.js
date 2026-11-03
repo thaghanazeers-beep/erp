@@ -207,7 +207,11 @@ async function getAttachmentFile(key) {
   // Copy-to-storage is ON whenever a durable backend is configured (opt out with
   // ATTACHMENT_WRITEBACK=false), so each Notion file is fetched once and every
   // later preview is served from our own storage instead of Notion's expiring links.
-  const writeBack = process.env.ATTACHMENT_WRITEBACK !== 'false' && fileStore.isConfigured();
+  // Not into GridFS by default: ~625 MB of Notion files would eat a small Atlas tier. Set
+  // ATTACHMENT_WRITEBACK=true to force it; FTP / S3 storage copies automatically.
+  const onGridfs = process.env.FILE_STORAGE === 'gridfs' && !process.env.S3_BUCKET;
+  const wb = process.env.ATTACHMENT_WRITEBACK;
+  const writeBack = fileStore.isConfigured() && (wb === 'true' || (wb !== 'false' && !onGridfs));
   const maxBytes = Number(process.env.ATTACHMENT_WRITEBACK_MAX_MB || 25) * 1024 * 1024;
   if (writeBack && contentLength && contentLength <= maxBytes) {
     const buffer = Buffer.from(await upstream.arrayBuffer());
