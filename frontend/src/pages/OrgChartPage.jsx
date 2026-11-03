@@ -289,12 +289,28 @@ export default function OrgChartPage() {
     return [...known, ...extra];
   })();
   const deptKey = (d) => boardDepts.find(k => k.toLowerCase() === d.toLowerCase()) || d;
+  // Team members who are not on the chart yet appear on the board as "virtual" cards. Moving one
+  // (or "Add all to chart") creates a real node for them; it has no reporting line, so approvals are unaffected.
+  const onChartIds = new Set(chart.nodes.map(n => n.memberId).filter(Boolean));
+  const virtualPeople = members
+    .filter(m => m.active !== false && !onChartIds.has(m._id))
+    .map(m => ({ id: `virtual:${m._id}`, name: m.name, orgRole: m.role || 'Member', department: '', memberId: m._id, virtual: true }));
+  const newNodesFor = (people, dept) => {
+    const baseY = Math.max(0, ...chart.nodes.map(n => (n.y || 0) + (n.h || 72))) + 120;
+    return people.map((m, i) => ({ id: genId() + i, name: m.name, orgRole: m.orgRole, department: dept, memberId: m.memberId, x: 20 + (i % 8) * 180, y: baseY + Math.floor(i / 8) * 100, w: 160, h: 72 }));
+  };
   const moveToDept = (nodeId, dept) => {
     const next = dept === UNASSIGNED ? '' : dept;
+    if (String(nodeId).startsWith('virtual:')) {
+      const person = virtualPeople.find(v => v.id === nodeId);
+      if (person) updateChart({ ...chart, nodes: [...chart.nodes, ...newNodesFor([person], next)] });
+      return;
+    }
     const node = chart.nodes.find(n => n.id === nodeId);
     if (!node || normDept(node.department) === next) return;
     updateChart({ ...chart, nodes: chart.nodes.map(n => (n.id === nodeId ? { ...n, department: next } : n)) });
   };
+  const addAllToChart = () => { if (virtualPeople.length) updateChart({ ...chart, nodes: [...chart.nodes, ...newNodesFor(virtualPeople, '')] }); };
   const addDepartment = () => {
     const name = normDept(prompt('New department name'));
     if (!name || boardDepts.some(d => d.toLowerCase() === name.toLowerCase())) return;
@@ -363,7 +379,7 @@ export default function OrgChartPage() {
       {view === 'board' && (
         <div className="orgboard">
           {[UNASSIGNED, ...boardDepts].map(dept => {
-            const people = chart.nodes.filter(n => (dept === UNASSIGNED ? nodeDept(n) === UNASSIGNED : nodeDept(n).toLowerCase() === dept.toLowerCase()));
+            const people = [...chart.nodes, ...virtualPeople].filter(n => (dept === UNASSIGNED ? nodeDept(n) === UNASSIGNED : nodeDept(n).toLowerCase() === dept.toLowerCase()));
             if (dept === UNASSIGNED && !people.length) return null;
             return (
               <div
@@ -384,7 +400,7 @@ export default function OrgChartPage() {
                         draggable
                         style={{ borderLeftColor: colors.border }}
                         onDragStart={(e) => { e.dataTransfer.setData('text/plain', n.id); e.dataTransfer.effectAllowed = 'move'; }}
-                        onDoubleClick={() => openEdit(n)}
+                        onDoubleClick={() => { if (!n.virtual) openEdit(n); }}
                         title="Drag to another department · double-click to edit"
                       >
                         <div className="orgboard-name">{n.name}</div>
@@ -402,6 +418,7 @@ export default function OrgChartPage() {
             );
           })}
           <button className="orgboard-add" onClick={addDepartment}>+ Department</button>
+          {virtualPeople.length > 0 && <button className="orgboard-add" onClick={addAllToChart} title="Create chart nodes for everyone not on the chart yet, then click Save Chart">+ Add {virtualPeople.length} people to chart</button>}
         </div>
       )}
 
