@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { weeksOf, weekFor, istIso, fyOf, monthsBetween, workingDays } = require('../routes/erp')._helpers;
+const { LEAVE_TITLE, weeksOf, weekFor, istIso, fyOf, monthsBetween, workingDays } = require('../routes/erp')._helpers;
 
 test('week 1 runs from 1 Jan to the first Sunday, later weeks are Mon-Sun', () => {
   const w = weeksOf(2026); // 1 Jan 2026 is a Thursday, first Sunday is 4 Jan
@@ -28,6 +28,11 @@ test('IST date rolls over at 18:30 UTC, not midnight UTC', () => {
 test('Indian financial year is Apr-Mar', () => {
   assert.strictEqual(fyOf('2026-03-31'), 2025);
   assert.strictEqual(fyOf('2026-04-01'), 2026);
+});
+
+test('leave titles are recognised but design/docs tasks are not', () => {
+  for (const ok of ['Casual Leave', 'Sick Leave', 'Public Holiday', 'Leave', 'Half day off']) assert.ok(LEAVE_TITLE.test(ok), ok);
+  for (const no of ['Mayvel holiday post', 'Mayvel - Public Holiday Calendar Design', 'Seyo: Roles and Permission Documentation', 'Diwali Poster']) assert.ok(!LEAVE_TITLE.test(no), no);
 });
 
 test('monthsBetween is inclusive', () => {

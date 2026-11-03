@@ -95,7 +95,15 @@ const holidaySchema = new Schema({
   name: { type: String, default: 'Holiday' },
 }, { timestamps: true });
 
+// ─── Settings (e.g. the books-closed date) ───────────────────────────────────
+const settingSchema = new Schema({
+  key:       { type: String, required: true, unique: true },
+  value:     { type: String, default: '' },
+  updatedBy: { type: String, default: '' },
+}, { timestamps: true });
+
 module.exports = {
+  Setting:       mongoose.model('ErpSetting', settingSchema),
   Timesheet:     mongoose.model('Timesheet', timesheetSchema),
   ResourceCost:  mongoose.model('ResourceCost', resourceCostSchema),
   PlannedCost:   mongoose.model('PlannedCost', plannedCostSchema),

@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   azureOid: { type: String, index: true }, // Microsoft Entra ID object id
   role: { type: String, enum: ['Admin', 'Team Owner', 'Member'], default: 'Member' },
   active: { type: Boolean, default: true }, // deactivate instead of hard-delete
+  phone: { type: String, default: '' },   // 10-digit mobile (from the staff ID cards)
   profilePictureUrl: { type: String },
   // Other names this person appears under (e.g. Notion "people" display names).
   // Merging a name into this account records it here so every Notion re-sync

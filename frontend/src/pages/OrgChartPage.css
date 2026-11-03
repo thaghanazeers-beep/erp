@@ -205,3 +205,21 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.3; }
 }
+
+/* ── View toggle + department board ── */
+.orgchart-view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.orgchart-view-toggle button { background: transparent; border: 0; padding: 4px 12px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; }
+.orgchart-view-toggle button.on { background: var(--primary-tint); color: var(--primary); font-weight: 600; }
+.orgboard { flex: 1; display: flex; gap: 12px; padding: 16px; overflow: auto; align-items: flex-start; }
+.orgboard-col { flex: 0 0 240px; background: var(--bg-secondary, var(--bg-card)); border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; flex-direction: column; max-height: 100%; }
+.orgboard-col.over { outline: 2px dashed var(--primary); background: var(--primary-tint); }
+.orgboard-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+.orgboard-count { font-size: 0.72rem; color: var(--text-muted); background: var(--bg-card); border-radius: 10px; padding: 1px 8px; }
+.orgboard-cards { padding: 8px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 60px; }
+.orgboard-card { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 8px 10px; cursor: grab; box-shadow: var(--shadow-sm); }
+.orgboard-card:active { cursor: grabbing; }
+.orgboard-name { font-size: 0.85rem; font-weight: 600; }
+.orgboard-role { font-size: 0.72rem; margin: 2px 0 6px; }
+.orgboard-move { width: 100%; font-size: 0.72rem; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--text-secondary); }
+.orgboard-empty { font-size: 0.78rem; color: var(--text-muted); text-align: center; padding: 14px 0; }
+.orgboard-add { flex: 0 0 auto; align-self: flex-start; background: transparent; border: 1px dashed var(--border); border-radius: var(--radius-md); padding: 10px 14px; color: var(--text-secondary); cursor: pointer; }

@@ -170,6 +170,8 @@ export const erpSaveAllocation = (managerId, userIds) => API.put(`/erp/resources
 export const erpCosts = () => API.get('/erp/resources/costs');
 export const erpAddCost = (data) => API.post('/erp/resources/costs', data);
 export const erpDeleteCost = (id) => API.delete(`/erp/resources/costs/${id}`);
+export const erpPeriodLock = () => API.get('/erp/resources/period-lock');
+export const erpSetPeriodLock = (closedThrough) => API.put('/erp/resources/period-lock', { closedThrough });
 export const erpHolidays = (year) => API.get('/erp/resources/holidays', { params: year ? { year } : {} });
 export const erpAddHoliday = (data) => API.post('/erp/resources/holidays', data);
 export const erpDeleteHoliday = (id) => API.delete(`/erp/resources/holidays/${id}`);

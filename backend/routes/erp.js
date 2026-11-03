@@ -10,7 +10,7 @@ const Sprint = require('../models/Sprint');
 const OrgChart = require('../models/OrgChart');
 const { Task } = require('../models/Task');
 const Notification = require('../models/Notification');
-const { Timesheet, ResourceCost, PlannedCost, BudgetRequest, Expense, Allocation, Holiday } = require('../models/Erp');
+const { Timesheet, ResourceCost, PlannedCost, BudgetRequest, Expense, Allocation, Holiday, Setting } = require('../models/Erp');
 
 const router = express.Router();
 const str = (v) => (typeof v === 'string' ? v : undefined);
@@ -124,6 +124,32 @@ const canManageProject = (u, p) => isFinanceAdmin(u) || (!!p?.managerId && p.man
 async function nameMap() {
   const users = await User.find({}, 'name');
   return Object.fromEntries(users.map(u => [uid(u), u.name]));
+}
+
+// ─── Leave ───────────────────────────────────────────────────────────────────
+// Leave is tracked as tasks ("Casual Leave", "Sick Leave", "Public Holiday"…) assigned to the person.
+// Full-day leave days are excluded from compliance and capacity so people are not marked as missing.
+// Half-day leave still expects hours, so it is not counted here.
+const LEAVE_TITLE = /^(?!.*\b(post|design|calendar|poster|document\w*|figjam|permission)\b).*\b(leave|day off|holiday|vacation)\b/i;
+async function leaveDays(userIds, from, to) {
+  const users = await User.find({ _id: { $in: userIds } }, 'name aliases');
+  const nameToUid = new Map();
+  users.forEach(u => { nameToUid.set(u.name.trim().toLowerCase(), uid(u)); (u.aliases || []).forEach(a => nameToUid.set(String(a).trim().toLowerCase(), uid(u))); });
+  const holidays = new Set((await Holiday.find({})).map(h => h.date));
+  const tasks = await Task.find({ title: { $regex: LEAVE_TITLE }, status: { $ne: 'Rejected' }, assignee: { $nin: ['', null] } }, 'title assignee startDate dueDate');
+  const out = new Map(userIds.map(id => [id, new Set()]));
+  for (const t of tasks) {
+    const owner = nameToUid.get(String(t.assignee).split(',')[0].trim().toLowerCase());
+    if (!owner || /half/i.test(t.title)) continue;
+    const a = t.startDate || t.dueDate; const b = t.dueDate || t.startDate; if (!a) continue;
+    let start = istIso(a); let end = istIso(b); if (end < start) end = start;
+    for (let d = fromIso(start), n = 0; iso(d) <= end && n < 31; d = addDays(d, 1), n++) {
+      const day = iso(d); const dow = d.getDay();
+      if (dow === 0 || dow === 6 || holidays.has(day) || day < from || day > to) continue;
+      out.get(owner).add(day);
+    }
+  }
+  return out;
 }
 
 // ─── Rate helpers ────────────────────────────────────────────────────────────
@@ -241,6 +267,30 @@ router.post('/projects', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Period lock ("books closed through") ────────────────────────────────────
+// Weeks ending on or before this date are frozen for everyone: no edits, submits, approvals,
+// rejections or reopens, so closed-period cost and P&L cannot change.
+const closedThrough = async () => (await Setting.findOne({ key: 'closedThrough' }))?.value || '';
+async function weekLocked(year, week) {
+  const w = weeksOf(year)[week - 1]; const c = await closedThrough();
+  return !!(c && w && w.end <= c);
+}
+const LOCK_MSG = 'This period is closed. Ask an admin to change the lock date first.';
+
+router.get('/resources/period-lock', async (req, res) => {
+  try { const s = await Setting.findOne({ key: 'closedThrough' }); res.json({ closedThrough: s?.value || '', updatedBy: s?.updatedBy || '', updatedAt: s?.updatedAt || null }); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.put('/resources/period-lock', async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) return res.status(403).json({ message: 'Admin access required' });
+    const v = str(req.body.closedThrough) || '';
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return res.status(400).json({ message: 'Use a date like 2026-09-30, or leave empty to unlock' });
+    if (v && v > todayIso()) return res.status(400).json({ message: 'You cannot close a period that has not ended yet' });
+    const s = await Setting.findOneAndUpdate({ key: 'closedThrough' }, { value: v, updatedBy: req.user.name }, { upsert: true, new: true });
+    res.json({ closedThrough: s.value, updatedBy: s.updatedBy });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Timesheets
 // ═════════════════════════════════════════════════════════════════════════════
@@ -308,13 +358,14 @@ router.put('/timesheet', async (req, res) => {
     const year = num(req.body.year); const week = num(req.body.week);
     const userId = str(req.body.userId) || uid(req.user);
     if (userId !== uid(req.user) && !isAdmin(req.user)) return res.status(403).json({ message: 'You can only edit your own timesheet' });
+    if (await weekLocked(year, week)) return res.status(423).json({ message: LOCK_MSG });
     const { sheet } = await loadOrBlank(userId, year, week);
-    if (['submitted', 'approved'].includes(sheet.status) && !isAdmin(req.user)) return res.status(409).json({ message: `This week is ${sheet.status}; ask your manager to reopen it.` });
+    // Submitted / approved sheets are read-only for everyone, admins included: reopen first (that is audited).
+    if (['submitted', 'approved'].includes(sheet.status)) return res.status(409).json({ message: `This week is ${sheet.status}; reopen it first.` });
     const v = await validateRows(userId, req.body.rows); if (v.error) return res.status(400).json({ message: v.error });
-    const lockedEdit = ['submitted', 'approved'].includes(sheet.status);
     sheet.rows = v.rows;
     if (sheet.status === 'rejected') sheet.status = 'draft';
-    sheet.history.push({ by: req.user.name, action: 'saved', note: lockedEdit ? `admin edit while ${sheet.status}` : '' });
+    sheet.history.push({ by: req.user.name, action: 'saved' });
     await sheet.save();
     res.json(sheet);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -323,6 +374,7 @@ router.put('/timesheet', async (req, res) => {
 router.post('/timesheet/submit', async (req, res) => {
   try {
     const year = num(req.body.year); const week = num(req.body.week); const userId = uid(req.user);
+    if (await weekLocked(year, week)) return res.status(423).json({ message: LOCK_MSG });
     const { sheet, w } = await loadOrBlank(userId, year, week);
     if (['submitted', 'approved'].includes(sheet.status)) return res.status(409).json({ message: `Already ${sheet.status}` });
     if (req.body.rows) { const v = await validateRows(userId, req.body.rows); if (v.error) return res.status(400).json({ message: v.error }); sheet.rows = v.rows; }
@@ -341,6 +393,7 @@ router.post('/timesheet/submit', async (req, res) => {
 router.post('/timesheet/copy-previous', async (req, res) => {
   try {
     const year = num(req.body.year); const week = num(req.body.week); const userId = uid(req.user);
+    if (await weekLocked(year, week)) return res.status(423).json({ message: LOCK_MSG });
     const { sheet } = await loadOrBlank(userId, year, week);
     if (['submitted', 'approved'].includes(sheet.status)) return res.status(409).json({ message: `Already ${sheet.status}` });
     const p = prevWeek(year, week);
@@ -358,6 +411,8 @@ async function decide(req, res, action) {
     if (!sheet) return res.status(404).json({ message: 'Timesheet not found' });
     const reports = await reportsOf(req.user);
     if (!reports.includes(sheet.userId)) return res.status(403).json({ message: 'You are not an approver for this person' });
+    if (await weekLocked(sheet.year, sheet.week)) return res.status(423).json({ message: LOCK_MSG });
+    if (action === 'reopen' && sheet.status === 'approved' && !(str(req.body.note) || '').trim()) return res.status(400).json({ message: 'Give a reason for reopening an approved timesheet' });
     if (action === 'reopen') { sheet.status = 'draft'; }
     else { if (sheet.status !== 'submitted') return res.status(409).json({ message: `Sheet is ${sheet.status}, not submitted` }); sheet.status = action === 'approve' ? 'approved' : 'rejected'; }
     sheet.decidedAt = new Date(); sheet.decidedBy = req.user.name; sheet.note = str(req.body.note) || '';
@@ -613,10 +668,11 @@ router.get('/reports/compliance', async (req, res) => {
     let people = req.query.scope === 'me' ? [uid(req.user)] : await reportsOf(req.user); if (!people.length) people = [uid(req.user)];
     const daysInMonth = new Date(year, month, 0).getDate(); const days = Array.from({ length: daysInMonth }, (_, i) => `${ym}-${pad(i + 1)}`); const today = todayIso();
     const sheets = await Timesheet.find({ userId: { $in: people }, days: { $elemMatch: { $gte: days[0], $lte: days[days.length - 1] } } });
+    const leave = await leaveDays(people, days[0], days[days.length - 1]);
     const rows = people.map(u => {
       const logged = new Set(); sheets.filter(s => s.userId === u).forEach(s => s.days.forEach((d, i) => { if (s.rows.some(r => r.minutes[i] > 0)) logged.add(d); }));
       let present = 0, missing = 0, working = 0;
-      const cells = days.map(d => { const dow = fromIso(d).getDay(); if (dow === 0 || dow === 6 || holidays.has(d)) return 'H'; if (d > today) return ''; working++; if (logged.has(d)) { present++; return 'P'; } missing++; return 'M'; });
+      const cells = days.map(d => { const dow = fromIso(d).getDay(); if (dow === 0 || dow === 6 || holidays.has(d)) return 'H'; if (leave.get(u)?.has(d) && !logged.has(d)) return 'L'; if (d > today) return ''; working++; if (logged.has(d)) { present++; return 'P'; } missing++; return 'M'; });
       return { userId: u, userName: names[u], present, working, missing, pct: working ? Math.round((present / working) * 100) : 100, cells };
     }).sort((a, b) => a.userName.localeCompare(b.userName));
     res.json({ year, month, days, rows });
@@ -735,8 +791,11 @@ router.get('/kpi', async (req, res) => {
     const recent = recentWeeks(8);
     const recentSheets = await Timesheet.find({ userId: { $in: people }, $or: recent.map(w => ({ year: w.year, week: w.week })) }, 'userId year week rows');
 
+    const leave = await leaveDays(people, from, upto);
     const rows = users.map(u => {
       const id = uid(u);
+      const leaveCount = [...(leave.get(id) || [])].filter(d => d >= from && d <= upto).length;
+      const myWorking = Math.max(0, workingDays - leaveCount); const myCapacity = myWorking * 8 * 60;
       const mine = tasks.filter(t => ownerOf(t.assignee) === id);
       const doneDate = (t) => (t.completedAt || t.dueDate || t.createdDate) ? istIso(t.completedAt || t.dueDate || t.createdDate) : null;
       const completed = mine.filter(t => t.status === 'Completed' && doneDate(t) >= from && doneDate(t) <= to);
@@ -764,9 +823,9 @@ router.get('/kpi', async (req, res) => {
 
       const k = {
         delivery: pct(onTime, withDue.length),
-        compliance: pct(present, workingDays),
+        compliance: pct(present, myWorking),
         submission: pct(promptWeeks.length, dueWeeks.length),
-        utilisation: capacityMinutes ? clamp(Math.round((logged / capacityMinutes) * 100), 0, 100) : null,
+        utilisation: myCapacity ? clamp(Math.round((logged / myCapacity) * 100), 0, 100) : null,
         accuracy: ratio == null ? null : clamp(Math.round(100 - Math.abs(1 - ratio) * 100), 0, 100),
         quality: pct(completed.length, completed.length + rejected.length),
       };
@@ -775,7 +834,7 @@ router.get('/kpi', async (req, res) => {
       return {
         userId: id, name: u.name, avatar: u.profilePictureUrl || null, score, grade: gradeOf(score), components: k,
         tasks: { completed: completed.length, onTime, withDue: withDue.length, tracked, open: open.length, overdue: overdue.length, inReview, rejected: rejected.length, estimatedHours: estSum, actualHours: actSum, ratio },
-        time: { loggedMinutes: logged, billableMinutes: billableMin, approvedMinutes: approvedMin, billablePct: pct(billableMin, logged), presentDays: present, workingDays, capacityMinutes, submittedWeeks: submittedWeeks.length, promptWeeks: promptWeeks.length, dueWeeks: dueWeeks.length, approvedSheets: decided.filter(s => s.status === 'approved').length, rejectedSheets: decided.filter(s => s.status === 'rejected').length, plannedHours, planUsedPct: plannedHours ? Math.round((logged / 60 / plannedHours) * 100) : null },
+        time: { loggedMinutes: logged, billableMinutes: billableMin, approvedMinutes: approvedMin, billablePct: pct(billableMin, logged), presentDays: present, workingDays: myWorking, leaveDays: leaveCount, capacityMinutes: myCapacity, submittedWeeks: submittedWeeks.length, promptWeeks: promptWeeks.length, dueWeeks: dueWeeks.length, approvedSheets: decided.filter(s => s.status === 'approved').length, rejectedSheets: decided.filter(s => s.status === 'rejected').length, plannedHours, planUsedPct: plannedHours ? Math.round((logged / 60 / plannedHours) * 100) : null },
         weekly,
       };
     }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));
@@ -789,5 +848,5 @@ router.get('/kpi', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router._helpers = { weeksOf, weekFor, istIso, fyOf, monthsBetween, workingDays };
+router._helpers = { LEAVE_TITLE, weeksOf, weekFor, istIso, fyOf, monthsBetween, workingDays };
 module.exports = router;

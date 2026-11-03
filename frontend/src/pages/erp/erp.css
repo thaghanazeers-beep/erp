@@ -119,6 +119,7 @@
 .cal-cell { width: 26px; text-align: center; font-size: 0.7rem; font-weight: 600; padding: 4px 0 !important; }
 .cal-cell.P { background: rgba(46, 158, 107, 0.2); color: var(--accent-green); }
 .cal-cell.M { background: rgba(212, 76, 71, 0.18); color: var(--accent-red); }
+.cal-cell.L { background: rgba(35, 131, 226, 0.15); color: var(--primary); }
 .cal-cell.H { background: var(--bg-surface); color: var(--text-muted); }
 
 /* Hierarchy tree */

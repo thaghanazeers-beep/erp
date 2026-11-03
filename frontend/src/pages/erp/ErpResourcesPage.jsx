@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Avatar from '../../components/Avatar';
-import { erpAllocations, erpSaveAllocation, erpCosts, erpAddCost, erpDeleteCost, erpHolidays, erpAddHoliday, erpDeleteHoliday, erpHierarchy, getTeam } from '../../api';
+import { erpAllocations, erpSaveAllocation, erpCosts, erpAddCost, erpDeleteCost, erpPeriodLock, erpSetPeriodLock, erpHolidays, erpAddHoliday, erpDeleteHoliday, erpHierarchy, getTeam } from '../../api';
 import { useErpMe, useAsync } from './erpHooks';
 import { PageHead, Tabs, Banner, Empty } from './ErpBits';
 import { fmtINR, fmtDate, todayIso, errMsg, downloadCsv } from './erpUtils';
@@ -97,6 +97,24 @@ function Hierarchy({ team }) {
   return <div className="erp-card"><Tree nodes={d.roots} team={team} /></div>;
 }
 
+function PeriodLock({ me }) {
+  const [val, setVal] = useState(''); const [info, setInfo] = useState(null); const [msg, setMsg] = useState(null);
+  const load = () => erpPeriodLock().then(r => { setInfo(r.data); setVal(r.data.closedThrough || ''); }).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const save = async () => { try { await erpSetPeriodLock(val); await load(); setMsg({ kind: 'ok', text: val ? `Books closed through ${val}. Timesheets for those weeks can no longer be edited, approved, rejected or reopened.` : 'Period lock removed.' }); } catch (e) { setMsg({ kind: 'err', text: errMsg(e) }); } };
+  return (
+    <>
+      <div className="erp-toolbar">
+        <label className="erp-field"><span>Books closed through</span><input type="date" className="input" value={val} max={todayIso()} onChange={(e) => setVal(e.target.value)} disabled={!me?.isAdmin} /></label>
+        <button className="btn btn-primary btn-sm" disabled={!me?.isAdmin} onClick={save}>Save</button>
+        <button className="btn btn-ghost btn-sm" disabled={!me?.isAdmin || !val} onClick={() => setVal('')}>Clear</button>
+      </div>
+      {msg && <Banner kind={msg.kind} onClose={() => setMsg(null)}>{msg.text}</Banner>}
+      <Banner kind="info">{info?.closedThrough ? `Currently closed through ${info.closedThrough}${info.updatedBy ? ` (set by ${info.updatedBy})` : ''}.` : 'No period is closed yet.'} Weeks that end on or before this date are frozen, so past P&amp;L and cost cannot change. {me?.isAdmin ? '' : 'Only admins can change this.'}</Banner>
+    </>
+  );
+}
+
 export default function ErpResourcesPage() {
   const { me } = useErpMe();
   const [tab, setTab] = useState('allocation'); const [team, setTeam] = useState([]);
@@ -104,10 +122,11 @@ export default function ErpResourcesPage() {
   return (
     <div className="erp-page">
       <PageHead title="Resources" subtitle="Who approves whom, what each person costs per day, the holiday calendar, and the reporting tree." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'allocation', label: 'Allocation' }, ...(me?.canSeeMoney ? [{ id: 'rates', label: 'Rate card' }] : []), { id: 'holidays', label: 'Holidays' }, { id: 'hierarchy', label: 'Hierarchy' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'allocation', label: 'Allocation' }, ...(me?.canSeeMoney ? [{ id: 'rates', label: 'Rate card' }] : []), { id: 'holidays', label: 'Holidays' }, { id: 'lock', label: 'Period lock' }, { id: 'hierarchy', label: 'Hierarchy' }]} />
       {tab === 'allocation' && <Allocation me={me} team={team} />}
       {tab === 'rates' && <RateCard me={me} team={team} />}
       {tab === 'holidays' && <Holidays me={me} />}
+      {tab === 'lock' && <PeriodLock me={me} />}
       {tab === 'hierarchy' && <Hierarchy team={team} />}
     </div>
   );

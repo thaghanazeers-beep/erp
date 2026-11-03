@@ -36,6 +36,11 @@ const getNodeColor = (node) => {
 
 const ORG_ROLES = ['Founder', 'CEO', 'COO', 'CTO', 'CFO', 'Director', 'Manager', 'Lead', 'Senior Developer', 'Developer', 'Designer', 'Marketing', 'Sales', 'HR', 'Support', 'Intern', 'Consultant'];
 
+// Departments shown as board columns even when empty. More can be added with "+ Department".
+const DEFAULT_DEPARTMENTS = ['Pro-Inspector team', 'Seyo', 'Bacsys', 'Auchan', 'SGS', 'MHS', 'Business Development', 'Accounts', 'Product Design', 'Inoset'];
+const UNASSIGNED = 'Unassigned';
+const loadCustomDepts = () => { try { return JSON.parse(localStorage.getItem('mayvel_org_departments') || '[]'); } catch { return []; } };
+
 const genId = () => `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 export default function OrgChartPage() {
@@ -58,6 +63,9 @@ export default function OrgChartPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');  // '', 'saved', 'error'
   const [loadingChart, setLoadingChart] = useState(true);
+  const [view, setView] = useState(() => localStorage.getItem('mayvel_org_view') || 'chart'); // 'chart' | 'board'
+  const [customDepts, setCustomDepts] = useState(loadCustomDepts);
+  const [dragOverDept, setDragOverDept] = useState(null);
 
   // New node form
   const [newName, setNewName] = useState('');
@@ -270,6 +278,31 @@ export default function OrgChartPage() {
     return `M${fx},${fy} C${fx},${my} ${tx},${my} ${tx},${ty}`;
   };
 
+  const switchView = (v) => { setView(v); localStorage.setItem('mayvel_org_view', v); };
+
+  // ─── Board view: one column per department, cards are the people ──────────────
+  const normDept = (d) => (d || '').trim();
+  const nodeDept = (n) => normDept(n.department) || UNASSIGNED;
+  const boardDepts = (() => {
+    const known = [...DEFAULT_DEPARTMENTS, ...customDepts];
+    const extra = [...new Set(chart.nodes.map(nodeDept))].filter(d => d !== UNASSIGNED && !known.some(k => k.toLowerCase() === d.toLowerCase()));
+    return [...known, ...extra];
+  })();
+  const deptKey = (d) => boardDepts.find(k => k.toLowerCase() === d.toLowerCase()) || d;
+  const moveToDept = (nodeId, dept) => {
+    const next = dept === UNASSIGNED ? '' : dept;
+    const node = chart.nodes.find(n => n.id === nodeId);
+    if (!node || normDept(node.department) === next) return;
+    updateChart({ ...chart, nodes: chart.nodes.map(n => (n.id === nodeId ? { ...n, department: next } : n)) });
+  };
+  const addDepartment = () => {
+    const name = normDept(prompt('New department name'));
+    if (!name || boardDepts.some(d => d.toLowerCase() === name.toLowerCase())) return;
+    const next = [...customDepts, name];
+    setCustomDepts(next);
+    localStorage.setItem('mayvel_org_departments', JSON.stringify(next));
+  };
+
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   const nodeMap = Object.fromEntries(chart.nodes.map(n => [n.id, n]));
@@ -282,6 +315,10 @@ export default function OrgChartPage() {
       <div className="orgchart-toolbar">
         <div className="orgchart-toolbar-left">
           <span className="tasks-count">{chart.nodes.length} nodes</span>
+          <div className="orgchart-view-toggle" role="tablist" aria-label="View mode">
+            <button role="tab" aria-selected={view === 'chart'} className={view === 'chart' ? 'on' : ''} onClick={() => switchView('chart')}>Chart</button>
+            <button role="tab" aria-selected={view === 'board'} className={view === 'board' ? 'on' : ''} onClick={() => switchView('board')}>Board</button>
+          </div>
 
           {/* ── SAVE BUTTON ── */}
           <button
@@ -323,7 +360,53 @@ export default function OrgChartPage() {
         </div>
       </div>
 
+      {view === 'board' && (
+        <div className="orgboard">
+          {[UNASSIGNED, ...boardDepts].map(dept => {
+            const people = chart.nodes.filter(n => (dept === UNASSIGNED ? nodeDept(n) === UNASSIGNED : nodeDept(n).toLowerCase() === dept.toLowerCase()));
+            if (dept === UNASSIGNED && !people.length) return null;
+            return (
+              <div
+                key={dept}
+                className={`orgboard-col ${dragOverDept === dept ? 'over' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragOverDept(dept); }}
+                onDragLeave={() => setDragOverDept(d => (d === dept ? null : d))}
+                onDrop={(e) => { e.preventDefault(); setDragOverDept(null); const id = e.dataTransfer.getData('text/plain'); if (id) moveToDept(id, deptKey(dept)); }}
+              >
+                <div className="orgboard-head"><span>{dept}</span><span className="orgboard-count">{people.length}</span></div>
+                <div className="orgboard-cards">
+                  {people.map(n => {
+                    const colors = getNodeColor(n);
+                    return (
+                      <div
+                        key={n.id}
+                        className="orgboard-card"
+                        draggable
+                        style={{ borderLeftColor: colors.border }}
+                        onDragStart={(e) => { e.dataTransfer.setData('text/plain', n.id); e.dataTransfer.effectAllowed = 'move'; }}
+                        onDoubleClick={() => openEdit(n)}
+                        title="Drag to another department · double-click to edit"
+                      >
+                        <div className="orgboard-name">{n.name}</div>
+                        <div className="orgboard-role" style={{ color: colors.border }}>{n.orgRole}</div>
+                        <select className="orgboard-move" value={dept === UNASSIGNED ? '' : deptKey(dept)} onChange={(e) => moveToDept(n.id, e.target.value || UNASSIGNED)} aria-label={`Move ${n.name} to department`}>
+                          <option value="">{UNASSIGNED}</option>
+                          {boardDepts.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {!people.length && <div className="orgboard-empty">Drop people here</div>}
+                </div>
+              </div>
+            );
+          })}
+          <button className="orgboard-add" onClick={addDepartment}>+ Department</button>
+        </div>
+      )}
+
       {/* Canvas */}
+      {view === 'chart' && (
       <div
         className="orgchart-canvas"
         ref={canvasRef}
@@ -404,6 +487,7 @@ export default function OrgChartPage() {
           })}
         </div>
       </div>
+      )}
 
       {/* ─── Add Node Modal ─── */}
       {showAddNode && (
