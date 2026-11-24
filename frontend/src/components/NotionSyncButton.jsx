@@ -12,6 +12,7 @@ const summary = (r) => {
   if (!r) return '';
   const parts = [`${r.tasks?.upserted ?? 0} tasks updated`];
   if (r.sprints) parts.push(`${r.sprints.created + r.sprints.adopted} sprints, ${r.sprints.linked} tasks linked`);
+  if (r.projects) parts.push(`${r.projects.linked} tasks linked to projects`);
   if (r.attachments) parts.push(`${r.attachments.added} new attachments${r.attachments.blockPagesRemaining ? ` (${r.attachments.blockPagesRemaining} pages still to scan, sync again)` : ''}`);
   return parts.join(' · ');
 };

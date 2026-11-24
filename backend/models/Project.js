@@ -11,6 +11,7 @@ const projectSchema = new mongoose.Schema({
   createdBy: { type: String },
   createdDate: { type: Date, default: Date.now },
   teamspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teamspace' },
+  notionId: { type: String, index: true }, // source Notion page; the sync links tasks by it
 
   // ── ERP fields (timesheets, Profit & Loss) ──
   client:     { type: String, default: '' },                                   // project owner / customer

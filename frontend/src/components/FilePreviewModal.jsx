@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { downloadAttachmentBlob, getAttachmentSignedUrl } from '../api';
 import FileTypeIcon from './FileTypeIcon';
 import './FilePreviewModal.css';
@@ -75,7 +76,9 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
           const status = err.response?.status;
           setError(
             status === 404
-              ? 'This file could not be found in storage or in Notion. It may have been deleted or moved — try re-syncing from Notion or re-uploading it.'
+              ? (attachment.notionBlockId
+                ? 'This file could not be loaded from Notion. It may have been deleted from the Notion page — re-sync from Notion or re-upload it.'
+                : 'The stored copy of this file was lost (it was uploaded before files were backed up to Notion). Please re-upload it.')
               : `Preview failed to load${status ? ` (HTTP ${status})` : ''}.`
           );
           setLoading(false);
@@ -98,7 +101,9 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
   // Media (image/video/pdf/office) hides the modal chrome background; iframe kinds fill the body.
   const fillKinds = ['pdf', 'office'];
 
-  return (
+  // Portalled to <body> so it always sits above the task side panel / page
+  // modals, whatever stacking context the caller renders it in.
+  return createPortal(
     <div className="fp-overlay" onClick={onClose}>
       <div className="fp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="fp-header">
@@ -153,6 +158,7 @@ export default function FilePreviewModal({ attachment, onClose, onDownload }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

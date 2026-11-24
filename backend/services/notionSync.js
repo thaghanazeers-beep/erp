@@ -5,6 +5,7 @@
  *                 id `notion_<pageId>`; tasks created in Mayvel are untouched.
  *   2. sprints  — fetch each sprint page referenced by a task, upsert the
  *                 Sprint (match by notionId, then by exact name) and link tasks.
+ *      projects — same for the task's Project relation (sets task.projectId).
  *   3. attachments — record file metadata (Notion block ids); bytes stream on demand.
  *
  * One run at a time per process; `status()` reports progress for polling.
@@ -15,6 +16,7 @@ const { Client } = require('@notionhq/client');
 const { Task } = require('../models/Task');
 const User = require('../models/User');
 const Sprint = require('../models/Sprint');
+const Project = require('../models/Project');
 
 const state = { running: false, startedAt: null, finishedAt: null, startedBy: '', phase: '', progress: '', result: null, error: null };
 const status = () => ({ ...state, configured: !!(process.env.NOTION_TOKEN && process.env.NOTION_TASKS_DB) });
@@ -126,6 +128,36 @@ async function syncSprints(notion, log, { dryRun = false } = {}) {
   return { sprints: sprintIds.length, created, adopted, unreachable, linked };
 }
 
+/**
+ * Phase 2b: projects. Tasks carry the Notion relation as `notionProjectId`; link
+ * each one to the Project with that notionId (creating it from the Notion page
+ * title if missing) and keep the link current when the relation changes in Notion.
+ * Returns { projects, created, adopted, unreachable, linked }.
+ */
+async function syncProjects(notion, log, { dryRun = false } = {}) {
+  const projectIds = (await Task.distinct('notionProjectId')).filter(Boolean);
+  let linked = 0, created = 0, adopted = 0, unreachable = 0, n = 0;
+  for (const nid of projectIds) {
+    n++; log(`Linking project ${n}/${projectIds.length}…`);
+    let project = await Project.findOne({ notionId: nid });
+    if (!project) {
+      // Only hit Notion for projects we don't know yet.
+      let page;
+      try { page = await notion.pages.retrieve({ page_id: nid }); } catch { unreachable++; continue; }
+      const titleProp = Object.values(page.properties || {}).find(p => p.type === 'title');
+      const name = titleProp?.title?.map(t => t.plain_text).join('').trim() || `Project ${nid.slice(0, 8)}`;
+      project = await Project.findOne({ name, notionId: { $in: [null, undefined] } });
+      if (project) { adopted++; if (!dryRun) { project.notionId = nid; await project.save(); } }
+      else { created++; if (!dryRun) project = await Project.create({ name, notionId: nid, createdBy: 'Notion sync' }); }
+      await sleep(350); // stay under Notion's 3 req/s
+    }
+    if (!dryRun && project) {
+      const r = await Task.updateMany({ notionProjectId: nid, projectId: { $ne: project._id.toString() } }, { projectId: project._id.toString() });
+      linked += r.modifiedCount;
+    }
+  }
+  return { projects: projectIds.length, created, adopted, unreachable, linked };
+}
 
 // ─── Phase 3: attachments ─────────────────────────────────────────────────────
 // Records attachment *metadata* only (name + Notion block id). Bytes are fetched
@@ -201,7 +233,7 @@ async function syncAttachments(notion, log, pages = []) {
  * Run the full sync. Resolves with the result; throws if a run is already in
  * progress or Notion is not configured. `log` receives progress lines.
  */
-async function runNotionSync({ startedBy = 'system', log = () => {}, phases = ['tasks', 'sprints', 'attachments'] } = {}) {
+async function runNotionSync({ startedBy = 'system', log = () => {}, phases = ['tasks', 'sprints', 'projects', 'attachments'] } = {}) {
   if (state.running) { const e = new Error('A Notion sync is already running'); e.code = 'BUSY'; throw e; }
   if (!process.env.NOTION_TOKEN || !process.env.NOTION_TASKS_DB) { const e = new Error('NOTION_TOKEN / NOTION_TASKS_DB are not set on the server'); e.code = 'UNCONFIGURED'; throw e; }
   Object.assign(state, { running: true, startedAt: new Date(), finishedAt: null, startedBy, phase: 'tasks', progress: 'Connecting to Notion…', result: null, error: null });
@@ -215,6 +247,7 @@ async function runNotionSync({ startedBy = 'system', log = () => {}, phases = ['
     const runPhase = async (name, fn) => { if (!phases.includes(name)) return; state.phase = name; try { await fn(); } catch (e) { errors[name] = e.message; log(`${name} failed: ${e.message}`); } };
     await runPhase('tasks', async () => { const t = await syncTasks(notion, progress); pages = t.pages; result.tasks = { fetched: t.fetched, upserted: t.upserted, skipped: t.skipped }; });
     await runPhase('sprints', async () => { result.sprints = await syncSprints(notion, progress); });
+    await runPhase('projects', async () => { result.projects = await syncProjects(notion, progress); });
     await runPhase('attachments', async () => { result.attachments = await syncAttachments(notion, progress, pages); });
     if (Object.keys(errors).length) result.errors = errors;
     if (Object.keys(errors).length === phases.length) throw new Error(Object.values(errors).join('; '));
@@ -227,4 +260,4 @@ async function runNotionSync({ startedBy = 'system', log = () => {}, phases = ['
   }
 }
 
-module.exports = { runNotionSync, syncTasks, syncSprints, syncAttachments, status };
+module.exports = { runNotionSync, syncTasks, syncSprints, syncProjects, syncAttachments, status };

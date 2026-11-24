@@ -24,6 +24,7 @@ const workflowEngine = require('./workflowEngine');
 const { requireAuth, requireAdmin, issueToken } = require('./middleware/auth');
 const microsoftAuth = require('./services/microsoftAuth');
 const fileStore = require('./services/storage'); // S3-compatible bucket, or disk fallback
+const notionFiles = require('./services/notionFiles'); // mirror in-app uploads to the Notion page
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET is not set in .env — refusing to start.');
@@ -937,6 +938,18 @@ app.put('/api/tasks/:id', async (req, res) => {
     const task = await Task.findOneAndUpdate({ id: req.params.id }, updates, { new: true, runValidators: true });
     if (!task) return res.status(404).json({ message: 'Task not found' });
 
+    // An attachment we mirrored to Notion was removed here: remove the Notion
+    // block too, or the next sync would find it on the page and re-add it.
+    if (Array.isArray(updates.attachments)) {
+      const kept = new Set(updates.attachments.map(a => a?.id).filter(Boolean));
+      for (const a of oldTask.attachments || []) {
+        if (a.notionMirrored && a.notionBlockId && !kept.has(a.id)) {
+          notionFiles.removeMirroredBlock(a.notionBlockId)
+            .catch(err => console.warn(`Notion block delete failed for ${a.notionBlockId}: ${err.message}`));
+        }
+      }
+    }
+
     if (oldTask) {
       // Status changed
       if (updates.status && oldTask.status !== updates.status) {
@@ -1040,15 +1053,26 @@ app.post('/api/tasks/:id/attachments', attachmentUpload.array('attachments', 10)
     }
     const added = [];
     for (const f of req.files) {
-      const ext = path.extname(f.originalname || '').toLowerCase();
+      // multer decodes multipart filenames as latin1; browsers send UTF-8, so
+      // "3.48.09 PM" (narrow no-break space) arrived as "3.48.09â¯PM".
+      const name = Buffer.from(f.originalname || '', 'latin1').toString('utf8');
+      const ext = path.extname(name).toLowerCase();
       const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
       await fileStore.putFile(`attachments/${filename}`, f.buffer, f.mimetype);
+      // Mirror to the task's Notion page so the file has a durable copy: if our
+      // stored bytes are ever lost, the download route re-fetches from Notion.
+      let notionBlockId;
+      if (task.notionId) {
+        try { notionBlockId = await notionFiles.mirrorUpload(task.notionId, f.buffer, name, f.mimetype); }
+        catch (err) { console.warn(`Notion mirror failed for ${filename}: ${err.message}`); }
+      }
       added.push({
         id: crypto.randomUUID(),
-        name: f.originalname,
+        name,
         path: `/api/files/attachments/${filename}`,
         sizeBytes: f.size,
         addedAt: new Date(),
+        ...(notionBlockId ? { notionBlockId, notionMirrored: true } : {}),
       });
     }
     task.attachments.push(...added);

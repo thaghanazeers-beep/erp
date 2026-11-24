@@ -19,6 +19,7 @@ const attachmentSchema = new mongoose.Schema({
   sizeBytes: Number,
   addedAt: Date,
   notionBlockId: String, // set on Notion-imported files, so re-imports skip them
+  notionMirrored: Boolean, // uploaded in Mayvel and copied to the Notion page (we own that block)
 });
 
 // Discussion thread on a task. Reactions are emoji -> the user names who reacted.
